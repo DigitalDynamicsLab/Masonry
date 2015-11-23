@@ -182,7 +182,8 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
 
     // Create the floor using
     // fixed rigid body of 'box' type:
-
+    // HAHAHA
+   
     // Create a material for brick-floor
     ChSharedPtr<ChMaterialSurface> mmaterial_floor(new ChMaterialSurface);
     mmaterial_floor->SetFriction(0.0f);
