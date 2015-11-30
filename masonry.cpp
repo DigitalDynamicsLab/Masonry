@@ -306,7 +306,7 @@ int main(int argc, char* argv[]) {
 
     // Create all the rigid bodies loading their shapes from disk
     try {
-        load_brick_file (mphysicalSystem, "bricks.dat", mmaterial);
+        load_brick_file (mphysicalSystem, filename, mmaterial);
     }
     catch (ChException my_load_error) {
         GetLog()<< my_load_error.what();
@@ -330,10 +330,11 @@ int main(int argc, char* argv[]) {
 
     // Prepare the physical system for the simulation
 
-    mphysicalSystem.SetLcpSolverType(ChSystem::LCP_ITERATIVE_SOR);
+    //mphysicalSystem.SetLcpSolverType(ChSystem::LCP_ITERATIVE_SOR);  // less precise, faster
+    mphysicalSystem.SetLcpSolverType(ChSystem::LCP_ITERATIVE_BARZILAIBORWEIN); // precise, slower
 
-    mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.1); 
-    mphysicalSystem.SetIterLCPmaxItersSpeed(60);
+    mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.02); 
+    mphysicalSystem.SetIterLCPmaxItersSpeed(400);
     mphysicalSystem.SetIterLCPwarmStarting(true);
 
     //
@@ -341,7 +342,7 @@ int main(int argc, char* argv[]) {
     //
 
 
-    application.SetTimestep(0.01);
+    application.SetTimestep(0.001);
     application.SetPaused(true);
 
     while (application.GetDevice()->run()) {
