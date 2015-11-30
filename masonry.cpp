@@ -244,7 +244,7 @@ int main(int argc, char* argv[]) {
     ChIrrWizard::add_typical_Sky(application.GetDevice());
     ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
                                     core::vector3df(30.f, 80.f, 60.f), 290, 190);
-    ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(-1, 1, 1), core::vector3df(0, 0, 0));
+    ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(-8, 8, 8), core::vector3df(0, 0, 0));
 
     // Here set the inward-outward margins for collision shapes:
     collision::ChCollisionModel::SetDefaultSuggestedEnvelope(0.005);
@@ -310,7 +310,7 @@ int main(int argc, char* argv[]) {
 
         application.DrawAll();
 
-        ChIrrTools::drawGrid(application.GetVideoDriver(), 0.5, 0.5, 10, 10,
+        ChIrrTools::drawGrid(application.GetVideoDriver(), 2, 2, 10, 10,
                              ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),
                              video::SColor(50, 90, 90, 150), true);
 
