@@ -97,23 +97,31 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, ChSharedPt
 
             int  my_ID    = (int)tokenvals[0];
             bool my_fixed = (bool)tokenvals[1];   
+            int token_stride = 2;
 
             ChVector<> my_force;
-            my_force.x = tokenvals[2+0];
-            my_force.y = tokenvals[2+1];
-            my_force.z = tokenvals[2+2];
+            if (GLOBAL_load_forces) {
+                my_force.x = tokenvals[token_stride+0];
+                my_force.y = tokenvals[token_stride+1];
+                my_force.z = tokenvals[token_stride+2];
+                token_stride += 3;
+                if (GLOBAL_swap_zy) std::swap(my_force.y, my_force.z);
+            }
 
             ChVector<> my_reference;
-            my_reference.x = tokenvals[5+0];
-            my_reference.y = tokenvals[5+1];
-            my_reference.z = tokenvals[5+2];
+            my_reference.x = tokenvals[token_stride+0];
+            my_reference.y = tokenvals[token_stride+1];
+            my_reference.z = tokenvals[token_stride+2];
+            if (GLOBAL_swap_zy) std::swap(my_reference.y, my_reference.z);
+            token_stride += 3;
             
             std::vector< ChVector<> > my_vertexes;
-            for (int off = 8; off < ntokens; off += 3) {
+            for (int off = token_stride; off < ntokens; off += 3) {
                 ChVector<> my_point;
                 my_point.x = tokenvals[off+0];
                 my_point.y = tokenvals[off+1];
                 my_point.z = tokenvals[off+2];
+                if (GLOBAL_swap_zy) std::swap(my_point.y, my_point.z);
                 my_point = my_point - my_reference; // chrono want these points in reference system, but in file are in absolute system
                 my_vertexes.push_back(my_point);
             }
