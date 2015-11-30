@@ -227,6 +227,11 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
 
 int main(int argc, char* argv[]) {
 
+    char* filename = "bricks.dat"; // commento per Vale: variabile stringa, inizializzata a default
+
+    if (argc ==2)
+        filename = argv[1];
+
     // Create a ChronoENGINE physical system
     ChSystem mphysicalSystem;
 
