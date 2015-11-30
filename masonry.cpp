@@ -223,6 +223,47 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
 }
 
 
+
+
+// This is the contact reporter class, just for writing contacts on 
+// a file on disk
+class _contact_reporter_class : public  chrono::ChReportContactCallback2 
+{
+    public:
+    ChStreamOutAsciiFile* mfile; // the file to save data into
+
+    virtual bool ReportContactCallback2(
+                                const ChVector<>& pA,             ///< get contact pA
+                                const ChVector<>& pB,             ///< get contact pB
+                                const ChMatrix33<>& plane_coord,  ///< get contact plane coordsystem (A column 'X' is contact normal)
+                                const double& distance,           ///< get contact distance
+                                const ChVector<>& react_forces,   ///< get react.forces (if already computed). In coordsystem 'plane_coord'
+                                const ChVector<>& react_torques,  ///< get react.torques, if rolling friction (if already computed).
+                                ChContactable* contactobjA,  ///< get model A (note: some containers may not support it and could be zero!)
+                                ChContactable* contactobjB   ///< get model B (note: some containers may not support it and could be zero!)
+        )
+    {
+        // For each contact, this function is executed. 
+        // In this example, saves on ascii file:
+        //   position xyz, direction xyz, normal impulse, tangent impulse U, tangent impulse V, modelA ID, modelB ID information is saved. 
+        (*mfile)    << pA.x << ", " 
+                    << pA.y << ", " 
+                    << pA.z << ", " 
+                    << plane_coord.Get_A_Xaxis().x << ", "
+                    << plane_coord.Get_A_Xaxis().y << ", "
+                    << plane_coord.Get_A_Xaxis().z << ", "
+                    << react_forces.x << ", "
+                    << react_forces.y << ", "
+                    << react_forces.z << ", "
+                    << contactobjA->GetPhysicsItem()->GetIdentifier() << ", "
+                    << contactobjB->GetPhysicsItem()->GetIdentifier() << "\n";
+
+        return true;  // to continue scanning contacts
+    }
+};
+
+
+
 /// THE PROGRAM STARTS HERE!!!
 
 int main(int argc, char* argv[]) {
@@ -315,6 +356,41 @@ int main(int argc, char* argv[]) {
                              video::SColor(50, 90, 90, 150), true);
 
         application.DoStep();
+
+
+        // Do some output to disk, for later postprocessing
+        if (mphysicalSystem.GetStepcount() % GLOBAL_save_each  == 0)
+        {
+            // a) Use the contact callback object to save contacts:
+            char contactfilename[200];
+            sprintf(contactfilename, "%s%05d%s", "contacts", mphysicalSystem.GetStepcount(), ".txt");  // ex: contacts00020.tx
+            _contact_reporter_class my_contact_rep;
+            ChStreamOutAsciiFile result_contacts(contactfilename);
+            my_contact_rep.mfile = &result_contacts;
+            mphysicalSystem.GetContactContainer()->ReportAllContacts2(&my_contact_rep);
+
+            // b) Save rigid body positions and rotations
+            char bodyfilename[200];
+            sprintf(bodyfilename, "%s%05d%s", "bodies", mphysicalSystem.GetStepcount(), ".txt");  // ex: bodies00020.tx
+            ChStreamOutAsciiFile result_bodies(bodyfilename);
+            ChSystem::IteratorBodies mbodies = mphysicalSystem.IterBeginBodies();
+            while (mbodies != mphysicalSystem.IterEndBodies()) {
+                result_bodies   << (*mbodies)->GetIdentifier()  << ", " 
+                                << (*mbodies)->GetPos().x  << ", "
+                                << (*mbodies)->GetPos().y  << ", "
+                                << (*mbodies)->GetPos().z  << ", "
+                                << (*mbodies)->GetRot().e0  << ", "
+                                << (*mbodies)->GetRot().e1  << ", "
+                                << (*mbodies)->GetRot().e2  << ", "
+                                << (*mbodies)->GetRot().e3  << ", "
+                                << (*mbodies)->GetRotAngle() * CH_C_RAD_TO_DEG  << "\n";
+                ++mbodies;
+            }
+        }
+
+        // Force the simulator to close after N seconds
+        if (mphysicalSystem.GetChTime() > GLOBAL_max_simulation_time)
+            application.GetDevice()->closeDevice();
 
         application.GetVideoDriver()->endScene();
     }
