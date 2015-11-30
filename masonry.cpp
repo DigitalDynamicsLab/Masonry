@@ -31,12 +31,22 @@ using namespace video;
 using namespace io;
 using namespace gui;
 
+
 //using namespace std;
 
+
+// Some global variables
+
+int    GLOBAL_save_each = 10;
+double GLOBAL_max_simulation_time = 3.0;
+bool   GLOBAL_load_forces = false; 
+bool   GLOBAL_swap_zy = true;
+
+
+
 // Load brick pattern from disk
-
-
 // Create a bunch of ChronoENGINE rigid bodies 
+
 void load_brick_file(ChSystem& mphysicalSystem, const char* filename, ChSharedPtr<ChMaterialSurface> mmaterial) {
 
     std::fstream fin(filename);
