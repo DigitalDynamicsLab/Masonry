@@ -246,17 +246,23 @@ class _contact_reporter_class : public  chrono::ChReportContactCallback2
         // For each contact, this function is executed. 
         // In this example, saves on ascii file:
         //   position xyz, direction xyz, normal impulse, tangent impulse U, tangent impulse V, modelA ID, modelB ID information is saved. 
-        (*mfile)    << pA.x << ", " 
+        (*mfile)    << contactobjA->GetPhysicsItem()->GetIdentifier() << ", "
+                    << contactobjB->GetPhysicsItem()->GetIdentifier() << ", "    
+                    << pA.x << ", " 
                     << pA.y << ", " 
                     << pA.z << ", " 
-                    << plane_coord.Get_A_Xaxis().x << ", "
-                    << plane_coord.Get_A_Xaxis().y << ", "
-                    << plane_coord.Get_A_Xaxis().z << ", "
                     << react_forces.x << ", "
                     << react_forces.y << ", "
                     << react_forces.z << ", "
-                    << contactobjA->GetPhysicsItem()->GetIdentifier() << ", "
-                    << contactobjB->GetPhysicsItem()->GetIdentifier() << "\n";
+                    << plane_coord.Get_A_Xaxis().x << ", "
+                    << plane_coord.Get_A_Xaxis().y << ", "
+                    << plane_coord.Get_A_Xaxis().z << ", "
+                    << plane_coord.Get_A_Yaxis().x << ", "
+                    << plane_coord.Get_A_Yaxis().y << ", "
+                    << plane_coord.Get_A_Yaxis().z << ", "
+                    << plane_coord.Get_A_Zaxis().x << ", "
+                    << plane_coord.Get_A_Zaxis().y << ", "
+                    << plane_coord.Get_A_Zaxis().z << "\n";
 
         return true;  // to continue scanning contacts
     }
