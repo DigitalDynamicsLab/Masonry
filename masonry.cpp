@@ -39,8 +39,8 @@ using namespace gui;
 
 int    GLOBAL_save_each = 10;
 double GLOBAL_max_simulation_time = 3.0;
-bool   GLOBAL_load_forces = false; 
-bool   GLOBAL_swap_zy = true;
+bool   GLOBAL_load_forces = true; 
+bool   GLOBAL_swap_zy = false;
 
 
 
@@ -295,7 +295,7 @@ int main(int argc, char* argv[]) {
 
     // Here set the inward-outward margins for collision shapes:
     collision::ChCollisionModel::SetDefaultSuggestedEnvelope(0.005);
-    collision::ChCollisionModel::SetDefaultSuggestedMargin(0.000);
+    collision::ChCollisionModel::SetDefaultSuggestedMargin(0.005);
 
     //
     // HERE YOU POPULATE THE MECHANICAL SYSTEM OF CHRONO...
@@ -303,11 +303,11 @@ int main(int argc, char* argv[]) {
 
     // The default material for the bricks:
     ChSharedPtr<ChMaterialSurface> mmaterial(new ChMaterialSurface);
-    mmaterial->SetFriction(0.4f);
+    mmaterial->SetFriction(0.85f); // secondo Valentina
     //mmaterial->SetRestitution(0.0f);
-    //mmaterial->SetCompliance(0.0000005f);
-    //mmaterial->SetComplianceT(0.0000005f);
-    //mmaterial->SetDampingF(0.2f);
+    //mmaterial->SetCompliance(0.000005f);
+    //mmaterial->SetComplianceT(0.000005f);
+    mmaterial->SetDampingF(0.2f);
 
 
     // Create all the rigid bodies loading their shapes from disk
