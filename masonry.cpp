@@ -21,10 +21,10 @@
 // Use the namespace of Chrono
 
 using namespace chrono;
+using namespace irrlicht;
 
 // Use the main namespaces of Irrlicht
 using namespace irr;
-
 using namespace core;
 using namespace scene;
 using namespace video;
@@ -47,7 +47,7 @@ bool   GLOBAL_swap_zy = false;
 // Load brick pattern from disk
 // Create a bunch of ChronoENGINE rigid bodies 
 
-void load_brick_file(ChSystem& mphysicalSystem, const char* filename, ChSharedPtr<ChMaterialSurface> mmaterial) {
+void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::shared_ptr<ChMaterialSurface> mmaterial) {
 
     std::fstream fin(filename);
 	if (!fin.good())
@@ -127,7 +127,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, ChSharedPt
             }
 
             // Create a polygonal body:
-            ChSharedPtr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes,1500,true,true));
+            std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes,1500,true,true));
             my_body->SetIdentifier(my_ID);
             my_body->Set_Scr_force(my_force);
             my_body->SetMaterialSurface(mmaterial);
@@ -135,7 +135,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, ChSharedPt
             my_body->SetFrame_REF_to_abs(ChFrame<>(my_reference));
 
             // Set the color of body by randomizing a gray shade
-            ChSharedPtr<ChColorAsset> mcolor (new ChColorAsset);
+            std::shared_ptr<ChColorAsset> mcolor (new ChColorAsset);
             double mgray = 0.6+0.4*ChRandom();
             mcolor->SetColor(ChColor(mgray, mgray, mgray));
             my_body->AddAsset(mcolor);
@@ -154,7 +154,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, ChSharedPt
 
 void create_tile_pattern(ChSystem& mphysicalSystem) {
     // Create a material that will be shared between bricks
-    ChSharedPtr<ChMaterialSurface> mmaterial_brick(new ChMaterialSurface);
+    std::shared_ptr<ChMaterialSurface> mmaterial_brick(new ChMaterialSurface);
     mmaterial_brick->SetFriction(0.4f);
 
     double bricksize_x = 2;
@@ -173,7 +173,7 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
 
         for (int ix = 0; ix < nrows_x; ix += 1) {
 
-            ChSharedPtr<ChBodyEasyBox> mrigidBody1(new ChBodyEasyBox(bricksize_x, bricksize_y, bricksize_z,
+            std::shared_ptr<ChBodyEasyBox> mrigidBody1(new ChBodyEasyBox(bricksize_x, bricksize_y, bricksize_z,
                                                                      1000,      // density
                                                                      true,      // collide enable?
                                                                      true));    // visualization?
@@ -181,11 +181,11 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
             mrigidBody1->SetMaterialSurface(mmaterial_brick);  // use shared surface properties
             mphysicalSystem.Add(mrigidBody1);
 
-            ChSharedPtr<ChTexture> mtexture(new ChTexture());
+            std::shared_ptr<ChTexture> mtexture(new ChTexture());
                 mtexture->SetTextureFilename(GetChronoDataFile("cubetexture_borders.png"));
                 mrigidBody1->AddAsset(mtexture);
 
-            ChSharedPtr<ChBodyEasyBox> mrigidBody2(new ChBodyEasyBox(bricksize_z, bricksize_y, bricksize_x,
+            std::shared_ptr<ChBodyEasyBox> mrigidBody2(new ChBodyEasyBox(bricksize_z, bricksize_y, bricksize_x,
                                                                      1000,      // density
                                                                      true,      // collide enable?
                                                                      true));    // visualization?
@@ -203,10 +203,10 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
     // HAHAHA
    
     // Create a material for brick-floor
-    ChSharedPtr<ChMaterialSurface> mmaterial_floor(new ChMaterialSurface);
+    std::shared_ptr<ChMaterialSurface> mmaterial_floor(new ChMaterialSurface);
     mmaterial_floor->SetFriction(0.0f);
 
-    ChSharedPtr<ChBodyEasyBox> mrigidFloor(new ChBodyEasyBox(40, 4, 40,  // x,y,z size
+    std::shared_ptr<ChBodyEasyBox> mrigidFloor(new ChBodyEasyBox(40, 4, 40,  // x,y,z size
                                                              1000,         // density
                                                              true,         // collide enable?
                                                              true));       // visualization?
@@ -214,7 +214,7 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
     mrigidFloor->SetMaterialSurface(mmaterial_floor);
     mrigidFloor->SetBodyFixed(true);
 
-    ChSharedPtr<ChTexture> mtexture(new ChTexture());
+    std::shared_ptr<ChTexture> mtexture(new ChTexture());
     mtexture->SetTextureFilename(GetChronoDataFile("concrete.jpg"));
     mrigidFloor->AddAsset(mtexture);
 
@@ -227,12 +227,12 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
 
 // This is the contact reporter class, just for writing contacts on 
 // a file on disk
-class _contact_reporter_class : public  chrono::ChReportContactCallback2 
+class _contact_reporter_class : public  chrono::ChReportContactCallback 
 {
     public:
     ChStreamOutAsciiFile* mfile; // the file to save data into
 
-    virtual bool ReportContactCallback2(
+    virtual bool ReportContactCallback(
                                 const ChVector<>& pA,             ///< get contact pA
                                 const ChVector<>& pB,             ///< get contact pB
                                 const ChMatrix33<>& plane_coord,  ///< get contact plane coordsystem (A column 'X' is contact normal)
@@ -263,6 +263,10 @@ class _contact_reporter_class : public  chrono::ChReportContactCallback2
                     << plane_coord.Get_A_Zaxis().x << ", "
                     << plane_coord.Get_A_Zaxis().y << ", "
                     << plane_coord.Get_A_Zaxis().z << "\n";
+        GetLog() << "ReportContactCallback! \n";
+        GetLog() << plane_coord;
+        GetLog() << " dot product between X and Y ="<< Vdot(plane_coord.Get_A_Xaxis(), plane_coord.Get_A_Yaxis()) << "\n";
+        GetLog() << " dot product between Y and Z ="<< Vdot(plane_coord.Get_A_Yaxis(), plane_coord.Get_A_Zaxis()) << "\n\n";
 
         return true;  // to continue scanning contacts
     }
@@ -302,7 +306,7 @@ int main(int argc, char* argv[]) {
     //
 
     // The default material for the bricks:
-    ChSharedPtr<ChMaterialSurface> mmaterial(new ChMaterialSurface);
+    std::shared_ptr<ChMaterialSurface> mmaterial(new ChMaterialSurface);
     mmaterial->SetFriction(0.85f); // secondo Valentina
     //mmaterial->SetRestitution(0.0f);
     //mmaterial->SetCompliance(0.000005f);
@@ -336,12 +340,12 @@ int main(int argc, char* argv[]) {
 
     // Prepare the physical system for the simulation
 
-    //mphysicalSystem.SetLcpSolverType(ChSystem::LCP_ITERATIVE_SOR);  // less precise, faster
-    mphysicalSystem.SetLcpSolverType(ChSystem::LCP_ITERATIVE_BARZILAIBORWEIN); // precise, slower
+    //mphysicalSystem.SetLcpSolverType(ChSystem::SOLVER_SOR);  // less precise, faster
+    mphysicalSystem.SetSolverType(ChSystem::SOLVER_BARZILAIBORWEIN); // precise, slower
 
     mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.02); 
-    mphysicalSystem.SetIterLCPmaxItersSpeed(400);
-    mphysicalSystem.SetIterLCPwarmStarting(true);
+    mphysicalSystem.SetMaxItersSolverSpeed(400);
+    mphysicalSystem.SetSolverWarmStarting(true);
 
     //
     // THE SOFT-REAL-TIME CYCLE
@@ -374,7 +378,7 @@ int main(int argc, char* argv[]) {
             _contact_reporter_class my_contact_rep;
             ChStreamOutAsciiFile result_contacts(contactfilename);
             my_contact_rep.mfile = &result_contacts;
-            mphysicalSystem.GetContactContainer()->ReportAllContacts2(&my_contact_rep);
+            mphysicalSystem.GetContactContainer()->ReportAllContacts(&my_contact_rep);
 
             // b) Save rigid body positions and rotations
             char bodyfilename[200];
