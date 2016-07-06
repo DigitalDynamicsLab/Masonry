@@ -8,7 +8,7 @@
 #include "chrono/physics/ChSystem.h"
 #include "chrono/physics/ChBodyEasy.h"
 #include "chrono/assets/ChTexture.h"
-
+#include "chrono/collision/ChCCollisionSystemBullet.h"
 #include "chrono_irrlicht/ChIrrApp.h"
 #include <iostream>
 #include <sstream>
@@ -263,10 +263,12 @@ class _contact_reporter_class : public  chrono::ChReportContactCallback
                     << plane_coord.Get_A_Zaxis().x << ", "
                     << plane_coord.Get_A_Zaxis().y << ", "
                     << plane_coord.Get_A_Zaxis().z << "\n";
+        /*
         GetLog() << "ReportContactCallback! \n";
         GetLog() << plane_coord;
         GetLog() << " dot product between X and Y ="<< Vdot(plane_coord.Get_A_Xaxis(), plane_coord.Get_A_Yaxis()) << "\n";
         GetLog() << " dot product between Y and Z ="<< Vdot(plane_coord.Get_A_Yaxis(), plane_coord.Get_A_Zaxis()) << "\n\n";
+        */
 
         return true;  // to continue scanning contacts
     }
@@ -298,8 +300,9 @@ int main(int argc, char* argv[]) {
     ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(-8, 8, 8), core::vector3df(0, 0, 0));
 
     // Here set the inward-outward margins for collision shapes:
-    collision::ChCollisionModel::SetDefaultSuggestedEnvelope(0.005);
+    collision::ChCollisionModel::SetDefaultSuggestedEnvelope(0.01);
     collision::ChCollisionModel::SetDefaultSuggestedMargin(0.005);
+    collision::ChCollisionSystemBullet::SetContactBreakingThreshold(0.01);
 
     //
     // HERE YOU POPULATE THE MECHANICAL SYSTEM OF CHRONO...
@@ -308,9 +311,9 @@ int main(int argc, char* argv[]) {
     // The default material for the bricks:
     std::shared_ptr<ChMaterialSurface> mmaterial(new ChMaterialSurface);
     mmaterial->SetFriction(0.85f); // secondo Valentina
-    //mmaterial->SetRestitution(0.0f);
-    //mmaterial->SetCompliance(0.000005f);
-    //mmaterial->SetComplianceT(0.000005f);
+    //mmaterial->SetRestitution(0.0f); // either restitution, or compliance&damping, or none, but not both
+    mmaterial->SetCompliance(2e-8);
+    mmaterial->SetComplianceT(2e-8);
     mmaterial->SetDampingF(0.2f);
 
 
@@ -343,8 +346,9 @@ int main(int argc, char* argv[]) {
     //mphysicalSystem.SetLcpSolverType(ChSystem::SOLVER_SOR);  // less precise, faster
     mphysicalSystem.SetSolverType(ChSystem::SOLVER_BARZILAIBORWEIN); // precise, slower
 
-    mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.02); 
-    mphysicalSystem.SetMaxItersSolverSpeed(400);
+    //mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.02); 
+    mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.001); 
+    mphysicalSystem.SetMaxItersSolverSpeed(500);
     mphysicalSystem.SetSolverWarmStarting(true);
 
     //
