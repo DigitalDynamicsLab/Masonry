@@ -82,18 +82,18 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
 			std::istringstream ss(line);
 
             // parse line in format:
-            // ID, Fx Fy, Fz, Ref.x, Ref.y, Ref.z, x,y,z, x,y,z, x,y,z, ..,..,..
+            // ID, fixed, Fx Fy, Fz, Ref.x, Ref.y, Ref.z, x,y,z, x,y,z, x,y,z, ..,..,..
 			while(std::getline(ss, token,',') && ntokens < 300) 
 			{
 				std::istringstream stoken(token);
                 //GetLog() << "  token n." << ntokens << " is: "<< stoken.str().c_str() << "\n";
 				stoken >> tokenvals[ntokens]; 
-				++ntokens;
+				++ntokens;	
 			}
 			++added_bricks;
 
             if ((ntokens-2) % 3 != 0)
-                throw ChException("ERROR in .dat file, format is: ID, fixed, Fx, Fy, Fz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
+                throw ChException("ERROR in .dat file, format is: ID, fixed, Fx, Fy, Fz, Refx,Refy,Refz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
 
             int  my_ID    = (int)tokenvals[0];
             bool my_fixed = (bool)tokenvals[1];   
@@ -155,7 +155,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
 void create_tile_pattern(ChSystem& mphysicalSystem) {
     // Create a material that will be shared between bricks
     std::shared_ptr<ChMaterialSurface> mmaterial_brick(new ChMaterialSurface);
-    mmaterial_brick->SetFriction(0.4f);
+    mmaterial_brick->SetFriction(0.0f);
 
     double bricksize_x = 2;
     double bricksize_z = 1;
@@ -290,14 +290,14 @@ int main(int argc, char* argv[]) {
 
     // Create the Irrlicht visualization (open the Irrlicht device,
     // bind a simple user interface, etc. etc.)
-    ChIrrApp application(&mphysicalSystem, L"Bricks test", core::dimension2d<u32>(800, 600), false, true);
+    ChIrrApp application(&mphysicalSystem, L"Bricks test", core::dimension2d<u32>(1280, 960), false, true);
 
     // Easy shortcuts to add camera, lights, logo and sky in Irrlicht scene:
     ChIrrWizard::add_typical_Logo(application.GetDevice());
     ChIrrWizard::add_typical_Sky(application.GetDevice());
     ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
                                     core::vector3df(30.f, 80.f, 60.f), 290, 190);
-    ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(-8, 8, 8), core::vector3df(0, 0, 0));
+    ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(0, 1.6, 10), core::vector3df(0, 1.6, -3));
 
     // Here set the inward-outward margins for collision shapes:
     collision::ChCollisionModel::SetDefaultSuggestedEnvelope(0.01);
@@ -310,7 +310,7 @@ int main(int argc, char* argv[]) {
 
     // The default material for the bricks:
     std::shared_ptr<ChMaterialSurface> mmaterial(new ChMaterialSurface);
-    mmaterial->SetFriction(0.85f); // secondo Valentina
+    mmaterial->SetFriction(0.0f); // secondo Valentina
     //mmaterial->SetRestitution(0.0f); // either restitution, or compliance&damping, or none, but not both
     mmaterial->SetCompliance(2e-8);
     mmaterial->SetComplianceT(2e-8);
