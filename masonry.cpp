@@ -42,12 +42,19 @@ double GLOBAL_max_simulation_time = 3.0;
 bool   GLOBAL_load_forces = true; 
 bool   GLOBAL_swap_zy = false;
 
+ChFunction_Recorder GLOBAL_motion_X; // motion on x direction
+ChFunction_Recorder GLOBAL_motion_Y; // motion on y (vertical) direction
+ChFunction_Recorder GLOBAL_motion_Z; // motion on z direction
+double GLOBAL_motion_timestep = 0.01; // timestep for sampled earthquake motion 
+bool GLOBAL_use_motions = false;
 
 
 // Load brick pattern from disk
 // Create a bunch of ChronoENGINE rigid bodies 
 
 void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::shared_ptr<ChMaterialSurface> mmaterial) {
+
+    GetLog() << "Parsing " << filename << " brick file... \n";
 
     std::fstream fin(filename);
 	if (!fin.good())
@@ -131,7 +138,6 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
             my_body->SetIdentifier(my_ID);
             my_body->Set_Scr_force(my_force);
             my_body->SetMaterialSurface(mmaterial);
-            my_body->SetBodyFixed(my_fixed);
             my_body->SetFrame_REF_to_abs(ChFrame<>(my_reference));
 
             // Set the color of body by randomizing a gray shade
@@ -141,11 +147,70 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
             my_body->AddAsset(mcolor);
 
             mphysicalSystem.Add(my_body);
+
+            // Fix to ground 
+            if(my_fixed) {
+                if (GLOBAL_use_motions) {
+                    // earthquake motion required: so "fixed" means "impose motion respect to a fixed body"
+                    std::shared_ptr<ChBody> absolute_body (new ChBody);
+                    absolute_body->SetBodyFixed(true);
+                    mphysicalSystem.Add(absolute_body);
+
+                    std::shared_ptr<ChLinkLockLock> link_earthquake (new ChLinkLockLock);
+                    link_earthquake->Initialize(my_body, absolute_body, ChCoordsys<>(my_body->GetPos()) );
+                    link_earthquake->SetMotion_X(&GLOBAL_motion_X);
+                    link_earthquake->SetMotion_Y(&GLOBAL_motion_Y);
+                    link_earthquake->SetMotion_Z(&GLOBAL_motion_Z);
+
+                    mphysicalSystem.Add(link_earthquake);
+                }
+                else {
+                    // simplier approach: no earthquake motion, just fix body
+                    my_body->SetBodyFixed(true);
+                }
+            }
+
 		}
 
 
 	} // end while
 
+    GetLog() << " ...ok, parsed " << filename << " brick file successfully \n";
+}
+
+
+// Load seismic displacement function
+// from ascii file, each row is a value followed by CR. Time step is assumed constant.
+
+void load_motion(ChFunction_Recorder* mrecorder, std::string filename_pos, double t_offset = 0, double factor =1.0, double timestep = 0.01)
+{
+    GetLog() << "Parsing " << filename_pos << " motion file... \n";
+
+	ChStreamInAsciiFile mstream(filename_pos.c_str());
+	
+	mrecorder->Reset();
+	
+	while(!mstream.End_of_stream())
+	{
+		double time = 0;
+		double value = 0;
+		try
+		{
+			//mstream >> time;
+			mstream >> value;
+
+			//GetLog() << "  t=" << time << "  p=" << value << "\n";
+
+			mrecorder->AddPoint(time + t_offset, value * factor);
+            time += timestep;
+		}
+		catch(ChException myerror)
+		{
+			GetLog() << "  End parsing file " << filename_pos.c_str() << " because: \n  " << myerror.what() << "\n";
+			break;
+		}
+	}
+	GetLog() << " ...ok, parsed " << filename_pos << " motion file successfully \n";
 }
 
 
@@ -280,10 +345,43 @@ class _contact_reporter_class : public  chrono::ChReportContactCallback
 
 int main(int argc, char* argv[]) {
 
-    char* filename = "bricks.dat"; // commento per Vale: variabile stringa, inizializzata a default
+    // Parse input command
 
-    if (argc ==2)
+    char* filename = "bricks.dat"; // commento per Vale: variabile stringa, inizializzata a default
+    std::string file_motion_x = "";
+    std::string file_motion_y = "";
+    std::string file_motion_z = "";
+
+    if (argc >=2)
         filename = argv[1];
+
+    int iarg = 2;
+    while(iarg+1 < argc) {
+        bool got_command = false;
+        std::string command  = argv[iarg];
+        std::string argument = argv[iarg+1];
+        if (command == "motion_X") {
+            got_command = true;
+            file_motion_x = argument;
+        }
+        if (command == "motion_Y") {
+            got_command = true;
+            file_motion_y = argument;
+        }
+        if (command == "motion_Z") {
+            got_command = true;
+            file_motion_z = argument;
+        }
+        if (command == "motion_dt")  {
+            got_command = true;
+            GLOBAL_motion_timestep = atof(argument.c_str());
+        }
+        if (!got_command) {
+            GetLog() << "ERROR. Unknown command in input line: " << command << "\n";
+            return 0;
+        } 
+        iarg +=2;
+    }
 
     // Create a ChronoENGINE physical system
     ChSystem mphysicalSystem;
@@ -316,6 +414,19 @@ int main(int argc, char* argv[]) {
     mmaterial->SetComplianceT(2e-8);
     mmaterial->SetDampingF(0.2f);
 
+    // Create the motion functions, if any
+    if (file_motion_x != "") {
+        load_motion(&GLOBAL_motion_X, file_motion_x.c_str(), 0, 1, GLOBAL_motion_timestep);
+        GLOBAL_use_motions = true;
+    }
+    if (file_motion_y != "") {
+        load_motion(&GLOBAL_motion_Y, file_motion_y.c_str(), 0, 1, GLOBAL_motion_timestep);
+        GLOBAL_use_motions = true;
+    }
+    if (file_motion_z != "") {
+        load_motion(&GLOBAL_motion_Z, file_motion_z.c_str(), 0, 1, GLOBAL_motion_timestep);
+        GLOBAL_use_motions = true;
+    }
 
     // Create all the rigid bodies loading their shapes from disk
     try {
