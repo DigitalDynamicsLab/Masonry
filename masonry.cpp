@@ -189,17 +189,17 @@ void load_motion(ChFunction_Recorder* mrecorder, std::string filename_pos, doubl
 	ChStreamInAsciiFile mstream(filename_pos.c_str());
 	
 	mrecorder->Reset();
-	
+
+	double time = 0;
 	while(!mstream.End_of_stream())
 	{
-		double time = 0;
 		double value = 0;
 		try
 		{
 			//mstream >> time;
 			mstream >> value;
 
-			//GetLog() << "  t=" << time << "  p=" << value << "\n";
+			GetLog() << "  t=" << time + t_offset << "  p=" << value * factor << "\n";
 
 			mrecorder->AddPoint(time + t_offset, value * factor);
             time += timestep;
