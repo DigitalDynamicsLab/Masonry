@@ -657,6 +657,25 @@ int main(int argc, char* argv[]) {
                                 << (*mbodies)->GetRotAngle() * CH_C_RAD_TO_DEG  << "\n";
                 ++mbodies;
             }
+
+            // b) Save spring reactions
+            char springfilename[200];
+            sprintf(springfilename, "%s%05d%s", "springs", mphysicalSystem.GetStepcount(), ".txt");  // ex: springs00020.tx
+            ChStreamOutAsciiFile result_springs(springfilename);
+            ChSystem::IteratorLinks mlink = mphysicalSystem.IterBeginLinks();
+            while (mlink != mphysicalSystem.IterEndLinks()) {
+                if (auto mspring = std::dynamic_pointer_cast<ChLinkSpring>((*mlink)))
+                result_springs  << mspring->GetIdentifier()  << ", " 
+                                << mspring->Get_SpringReact()  << ", "
+                                << mspring->GetMarker1()->GetAbsCoord().pos.x << ", "
+                                << mspring->GetMarker1()->GetAbsCoord().pos.y << ", "
+                                << mspring->GetMarker1()->GetAbsCoord().pos.z << ", "
+                                << mspring->GetMarker2()->GetAbsCoord().pos.x << ", "
+                                << mspring->GetMarker2()->GetAbsCoord().pos.y << ", "
+                                << mspring->GetMarker2()->GetAbsCoord().pos.z << ", "
+                                << "\n";
+                ++mlink;
+            }
         }
 
         // Force the simulator to close after N seconds
