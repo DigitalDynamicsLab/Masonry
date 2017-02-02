@@ -8,6 +8,7 @@
 #include "chrono/physics/ChSystem.h"
 #include "chrono/physics/ChBodyEasy.h"
 #include "chrono/assets/ChTexture.h"
+#include "chrono/assets/ChPointPointDrawing.h"
 #include "chrono/collision/ChCCollisionSystemBullet.h"
 #include "chrono_irrlicht/ChIrrApp.h"
 #include <iostream>
@@ -17,6 +18,8 @@
 #include <algorithm>
 #include <functional> 
 #include <cctype>
+#include <unordered_map>
+
 
 // Use the namespace of Chrono
 
@@ -38,6 +41,7 @@ using namespace gui;
 // Some global variables
 
 int    GLOBAL_save_each = 10;
+int    GLOBAL_snapshot_each = 0;
 double GLOBAL_max_simulation_time = 3.0;
 bool   GLOBAL_load_forces = true; 
 bool   GLOBAL_swap_zy = false;
@@ -46,13 +50,16 @@ ChFunction_Recorder GLOBAL_motion_X; // motion on x direction
 ChFunction_Recorder GLOBAL_motion_Y; // motion on y (vertical) direction
 ChFunction_Recorder GLOBAL_motion_Z; // motion on z direction
 double GLOBAL_motion_timestep = 0.01; // timestep for sampled earthquake motion 
+double GLOBAL_timestep = 0.001; // timestep for timestepper integrator
 bool GLOBAL_use_motions = false;
 
 
 // Load brick pattern from disk
 // Create a bunch of ChronoENGINE rigid bodies 
 
-void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::shared_ptr<ChMaterialSurface> mmaterial) {
+void load_brick_file(ChSystem& mphysicalSystem, const char* filename, 
+                    std::shared_ptr<ChMaterialSurface> mmaterial, 
+                    std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
 
     GetLog() << "Parsing " << filename << " brick file... \n";
 
@@ -89,7 +96,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
 			std::istringstream ss(line);
 
             // parse line in format:
-            // ID, fixed, Fx Fy, Fz, Ref.x, Ref.y, Ref.z, x,y,z, x,y,z, x,y,z, ..,..,..
+            // ID, fixed, visible, Fx Fy, Fz, Ref.x, Ref.y, Ref.z, x,y,z, x,y,z, x,y,z, ..,..,..
 			while(std::getline(ss, token,',') && ntokens < 300) 
 			{
 				std::istringstream stoken(token);
@@ -99,12 +106,13 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
 			}
 			++added_bricks;
 
-            if ((ntokens-2) % 3 != 0)
-                throw ChException("ERROR in .dat file, format is: ID, fixed, Fx, Fy, Fz, Refx,Refy,Refz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
+            if ((ntokens-3) % 3 != 0)
+                throw ChException("ERROR in .dat file, format is: ID, fixed, visible, Fx, Fy, Fz, Refx,Refy,Refz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
 
             int  my_ID    = (int)tokenvals[0];
-            bool my_fixed = (bool)tokenvals[1];   
-            int token_stride = 2;
+            bool my_fixed = (bool)tokenvals[1]; 
+            bool my_visible = (bool)tokenvals[2]; 
+            int token_stride = 3;
 
             ChVector<> my_force;
             if (GLOBAL_load_forces) {
@@ -134,7 +142,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
             }
 
             // Create a polygonal body:
-            std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes,1500,true,true));
+            std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes,1500,true, my_visible));
             my_body->SetIdentifier(my_ID);
             my_body->Set_Scr_force(my_force);
             my_body->SetMaterialSurface(mmaterial);
@@ -169,6 +177,9 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
                     my_body->SetBodyFixed(true);
                 }
             }
+            
+            // add body to map
+            my_body_map[my_ID] = my_body;
 
 		}
 
@@ -177,6 +188,104 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename, std::share
 
     GetLog() << " ...ok, parsed " << filename << " brick file successfully \n";
 }
+
+
+// Load brick pattern from disk
+// Create a bunch of ChronoENGINE rigid bodies 
+
+void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
+
+    GetLog() << "Parsing " << filename << " spring file... \n";
+
+    std::fstream fin(filename);
+	if (!fin.good())
+		throw ChException("ERROR opening .dat file with springs: " + filename + "\n");
+
+    int added_springs = 0;
+
+    std::string line;
+    
+    // Parse the file line-by-line
+	while(std::getline(fin, line)) 
+	{
+		//trims white space from the beginning of the string
+		line.erase(line.begin(), find_if(line.begin(), line.end(), std::not1(std::ptr_fun<int, int>(std::isspace)))); 
+        
+        // skip empty lines
+		if(line[0] == 0) 
+            continue; 
+
+        // skip comments
+        if(line[0] == '#') {
+			continue; 
+		}
+
+		// a normal line should contain brick data:
+		if (true)
+		{
+			double tokenvals[300];
+			int ntokens = 0;
+
+			std::string token;
+			std::istringstream ss(line);
+
+            // parse line in format:
+            // ID, IDbodyA, x,y,z, IDbodyB, x,y,z,  k, L0
+			while(std::getline(ss, token,',') && ntokens < 300) 
+			{
+				std::istringstream stoken(token);
+				stoken >> tokenvals[ntokens]; 
+				++ntokens;	
+			}
+			++added_springs;
+
+            if (ntokens != 11)
+                throw ChException("ERROR in .dat file of springs, format is: ID, IDbodyA, x,y,z, IDbodyB, x,y,z,  k, L0 :\n"+ line+"\n");
+
+            int  my_ID      = (int)tokenvals[0];
+
+            int my_IDbodyA = (int)tokenvals[1]; 
+            if (my_body_map.find(my_IDbodyA) == my_body_map.end())
+                throw ChException("ERROR in .dat file of springs, body with identifier bodyA=" + std::to_string(my_IDbodyA) +  " not found :\n"+ line+"\n");
+            ChVector<> my_referenceA;
+            my_referenceA.x = tokenvals[2];
+            my_referenceA.y = tokenvals[3];
+            my_referenceA.z = tokenvals[4];
+            if (GLOBAL_swap_zy) std::swap(my_referenceA.y, my_referenceA.z);
+
+            int my_IDbodyB = (int)tokenvals[5];  
+            if (my_body_map.find(my_IDbodyB) == my_body_map.end())
+                throw ChException("ERROR in .dat file of springs, body with identifier bodyB=" + std::to_string(my_IDbodyB) +  " not found :\n"+ line+"\n");
+            ChVector<> my_referenceB;
+            my_referenceB.x = tokenvals[6];
+            my_referenceB.y = tokenvals[7];
+            my_referenceB.z = tokenvals[8];
+            if (GLOBAL_swap_zy) std::swap(my_referenceB.y, my_referenceB.z);
+            
+            double my_k   = tokenvals[9];
+            double my_L0 =  tokenvals[10];
+            
+            // Create a spring:
+            std::shared_ptr<ChLinkSpring> my_spring (new ChLinkSpring());
+            my_spring->SetIdentifier(my_ID);
+            std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
+            std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
+            GetLog() << "mbodyA ID: " << mbodyA->GetIdentifier() << " for ID " << my_IDbodyA << "  pos: " << mbodyA->GetPos() << "\n";
+            GetLog() << "mbodyB ID: " << mbodyB->GetIdentifier() << " for ID " << my_IDbodyB << "  pos: " << mbodyB->GetPos() << "\n";
+            my_spring->Initialize(mbodyA, mbodyB, false, my_referenceA, my_referenceB, false, my_L0);
+            my_spring->Set_SpringK(my_k);
+            mphysicalSystem.Add(my_spring);
+
+            std::shared_ptr<ChPointPointSegment> my_line (new ChPointPointSegment());
+            my_line->SetColor(ChColor(1,0,0));
+            my_spring->AddAsset(my_line);
+		}
+
+	} // end while
+
+    GetLog() << " ...ok, parsed " << filename << " spring file successfully \n";
+}
+
 
 
 // Load seismic displacement function
@@ -220,7 +329,7 @@ void load_motion(ChFunction_Recorder* mrecorder, std::string filename_pos, doubl
 void create_tile_pattern(ChSystem& mphysicalSystem) {
     // Create a material that will be shared between bricks
     std::shared_ptr<ChMaterialSurface> mmaterial_brick(new ChMaterialSurface);
-    mmaterial_brick->SetFriction(0.0f);
+    mmaterial_brick->SetFriction(0.4f);
 
     double bricksize_x = 2;
     double bricksize_z = 1;
@@ -269,7 +378,7 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
    
     // Create a material for brick-floor
     std::shared_ptr<ChMaterialSurface> mmaterial_floor(new ChMaterialSurface);
-    mmaterial_floor->SetFriction(0.0f);
+    mmaterial_floor->SetFriction(0.4f);
 
     std::shared_ptr<ChBodyEasyBox> mrigidFloor(new ChBodyEasyBox(40, 4, 40,  // x,y,z size
                                                              1000,         // density
@@ -351,6 +460,7 @@ int main(int argc, char* argv[]) {
     std::string file_motion_x = "";
     std::string file_motion_y = "";
     std::string file_motion_z = "";
+    std::string file_springs  = "";
 
     if (argc >=2)
         filename = argv[1];
@@ -375,6 +485,26 @@ int main(int argc, char* argv[]) {
         if (command == "motion_dt")  {
             got_command = true;
             GLOBAL_motion_timestep = atof(argument.c_str());
+        }
+        if (command == "dt")  {
+            got_command = true;
+            GLOBAL_timestep = atof(argument.c_str());
+        }
+        if (command == "T_max")  {
+            got_command = true;
+            GLOBAL_max_simulation_time = atof(argument.c_str());
+        }
+        if (command == "save_each")  {
+            got_command = true;
+            GLOBAL_save_each = atoi(argument.c_str());
+        }
+        if (command == "snapshot_each")  {
+            got_command = true;
+            GLOBAL_snapshot_each = atoi(argument.c_str());
+        }
+        if (command == "springs")  {
+            got_command = true;
+            file_springs = argument;
         }
         if (!got_command) {
             GetLog() << "ERROR. Unknown command in input line: " << command << "\n";
@@ -408,7 +538,7 @@ int main(int argc, char* argv[]) {
 
     // The default material for the bricks:
     std::shared_ptr<ChMaterialSurface> mmaterial(new ChMaterialSurface);
-    mmaterial->SetFriction(0.0f); // secondo Valentina
+    mmaterial->SetFriction(0.4f); // secondo Valentina
     //mmaterial->SetRestitution(0.0f); // either restitution, or compliance&damping, or none, but not both
     mmaterial->SetCompliance(2e-8);
     mmaterial->SetComplianceT(2e-8);
@@ -428,14 +558,26 @@ int main(int argc, char* argv[]) {
         GLOBAL_use_motions = true;
     }
 
+    std::unordered_map<int, std::shared_ptr<ChBody>> my_body_map;
+
     // Create all the rigid bodies loading their shapes from disk
     try {
-        load_brick_file (mphysicalSystem, filename, mmaterial);
+        load_brick_file (mphysicalSystem, filename, mmaterial, my_body_map);
     }
     catch (ChException my_load_error) {
         GetLog()<< my_load_error.what();
         system("pause");
     }
+
+    // Create all the springs loading from disk
+    if (file_springs != "")
+        try {
+            load_spring_file (mphysicalSystem, file_springs, my_body_map);
+        }
+        catch (ChException my_load_error) {
+            GetLog()<< my_load_error.what();
+            system("pause");
+        }
 
 
     // Use this function for adding a ChIrrNodeAsset to all items
@@ -467,13 +609,16 @@ int main(int argc, char* argv[]) {
     //
 
 
-    application.SetTimestep(0.001);
+    application.SetTimestep(GLOBAL_timestep);
     application.SetPaused(true);
+
+    if (GLOBAL_snapshot_each >0) {
+        application.SetVideoframeSave(true);
+        application.SetVideoframeSaveInterval(GLOBAL_snapshot_each);
+    }
 
     while (application.GetDevice()->run()) {
         application.GetVideoDriver()->beginScene(true, true, SColor(255, 140, 161, 192));
-
-        
 
         application.DrawAll();
 
@@ -515,7 +660,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Force the simulator to close after N seconds
-        if (mphysicalSystem.GetChTime() > GLOBAL_max_simulation_time)
+        if (application.GetSystem()->GetChTime() > GLOBAL_max_simulation_time)
             application.GetDevice()->closeDevice();
 
         application.GetVideoDriver()->endScene();
