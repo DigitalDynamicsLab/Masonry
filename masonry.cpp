@@ -42,7 +42,7 @@ using namespace gui;
 
 int    GLOBAL_save_each = 10;
 int    GLOBAL_snapshot_each = 0;
-double GLOBAL_max_simulation_time = 3.0;
+double GLOBAL_max_simulation_time = 30.0;
 bool   GLOBAL_load_forces = true; 
 bool   GLOBAL_swap_zy = false;
 
@@ -348,7 +348,7 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
         for (int ix = 0; ix < nrows_x; ix += 1) {
 
             std::shared_ptr<ChBodyEasyBox> mrigidBody1(new ChBodyEasyBox(bricksize_x, bricksize_y, bricksize_z,
-                                                                     1000,      // density
+                                                                     1800,      // density
                                                                      true,      // collide enable?
                                                                      true));    // visualization?
             mrigidBody1->SetPos(planedispl+ChVector<>(noff_x + ix*(bricksize_x+(2*bricksize_z)) +0.5*bricksize_x, 0, iz*(bricksize_z)+0.5*bricksize_z));
@@ -360,7 +360,7 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
                 mrigidBody1->AddAsset(mtexture);
 
             std::shared_ptr<ChBodyEasyBox> mrigidBody2(new ChBodyEasyBox(bricksize_z, bricksize_y, bricksize_x,
-                                                                     1000,      // density
+                                                                     1800,      // density
                                                                      true,      // collide enable?
                                                                      true));    // visualization?
             mrigidBody2->SetPos(planedispl+ChVector<>(noff_x + ix*(bricksize_x+(2*bricksize_z)) +0.5*bricksize_z, 0, iz*(bricksize_z)+0.5*bricksize_x+bricksize_z));
@@ -381,7 +381,7 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
     mmaterial_floor->SetFriction(0.4f);
 
     std::shared_ptr<ChBodyEasyBox> mrigidFloor(new ChBodyEasyBox(40, 4, 40,  // x,y,z size
-                                                             1000,         // density
+                                                             1800,         // density
                                                              true,         // collide enable?
                                                              true));       // visualization?
     mrigidFloor->SetPos(ChVector<>(0, -2, 0));
