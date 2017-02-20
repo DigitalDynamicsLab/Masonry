@@ -116,27 +116,27 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
             ChVector<> my_force;
             if (GLOBAL_load_forces) {
-                my_force.x = tokenvals[token_stride+0];
-                my_force.y = tokenvals[token_stride+1];
-                my_force.z = tokenvals[token_stride+2];
+                my_force.x() = tokenvals[token_stride+0];
+                my_force.y() = tokenvals[token_stride+1];
+                my_force.z() = tokenvals[token_stride+2];
                 token_stride += 3;
-                if (GLOBAL_swap_zy) std::swap(my_force.y, my_force.z);
+                if (GLOBAL_swap_zy) std::swap(my_force.y(), my_force.z());
             }
 
             ChVector<> my_reference;
-            my_reference.x = tokenvals[token_stride+0];
-            my_reference.y = tokenvals[token_stride+1];
-            my_reference.z = tokenvals[token_stride+2];
-            if (GLOBAL_swap_zy) std::swap(my_reference.y, my_reference.z);
+            my_reference.x() = tokenvals[token_stride+0];
+            my_reference.y() = tokenvals[token_stride+1];
+            my_reference.z() = tokenvals[token_stride+2];
+            if (GLOBAL_swap_zy) std::swap(my_reference.y(), my_reference.z());
             token_stride += 3;
             
             std::vector< ChVector<> > my_vertexes;
             for (int off = token_stride; off < ntokens; off += 3) {
                 ChVector<> my_point;
-                my_point.x = tokenvals[off+0];
-                my_point.y = tokenvals[off+1];
-                my_point.z = tokenvals[off+2];
-                if (GLOBAL_swap_zy) std::swap(my_point.y, my_point.z);
+                my_point.x() = tokenvals[off+0];
+                my_point.y() = tokenvals[off+1];
+                my_point.z() = tokenvals[off+2];
+                if (GLOBAL_swap_zy) std::swap(my_point.y(), my_point.z());
                 my_point = my_point - my_reference; // chrono want these points in reference system, but in file are in absolute system
                 my_vertexes.push_back(my_point);
             }
@@ -248,19 +248,19 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
             if (my_body_map.find(my_IDbodyA) == my_body_map.end())
                 throw ChException("ERROR in .dat file of springs, body with identifier bodyA=" + std::to_string(my_IDbodyA) +  " not found :\n"+ line+"\n");
             ChVector<> my_referenceA;
-            my_referenceA.x = tokenvals[2];
-            my_referenceA.y = tokenvals[3];
-            my_referenceA.z = tokenvals[4];
-            if (GLOBAL_swap_zy) std::swap(my_referenceA.y, my_referenceA.z);
+            my_referenceA.x() = tokenvals[2];
+            my_referenceA.y() = tokenvals[3];
+            my_referenceA.z() = tokenvals[4];
+            if (GLOBAL_swap_zy) std::swap(my_referenceA.y(), my_referenceA.z());
 
             int my_IDbodyB = (int)tokenvals[5];  
             if (my_body_map.find(my_IDbodyB) == my_body_map.end())
                 throw ChException("ERROR in .dat file of springs, body with identifier bodyB=" + std::to_string(my_IDbodyB) +  " not found :\n"+ line+"\n");
             ChVector<> my_referenceB;
-            my_referenceB.x = tokenvals[6];
-            my_referenceB.y = tokenvals[7];
-            my_referenceB.z = tokenvals[8];
-            if (GLOBAL_swap_zy) std::swap(my_referenceB.y, my_referenceB.z);
+            my_referenceB.x() = tokenvals[6];
+            my_referenceB.y() = tokenvals[7];
+            my_referenceB.z() = tokenvals[8];
+            if (GLOBAL_swap_zy) std::swap(my_referenceB.y(), my_referenceB.z());
             
             double my_k   = tokenvals[9];
             double my_L0 =  tokenvals[10];
@@ -422,21 +422,21 @@ class _contact_reporter_class : public  chrono::ChReportContactCallback
         //   position xyz, direction xyz, normal impulse, tangent impulse U, tangent impulse V, modelA ID, modelB ID information is saved. 
         (*mfile)    << contactobjA->GetPhysicsItem()->GetIdentifier() << ", "
                     << contactobjB->GetPhysicsItem()->GetIdentifier() << ", "    
-                    << pA.x << ", " 
-                    << pA.y << ", " 
-                    << pA.z << ", " 
-                    << react_forces.x << ", "
-                    << react_forces.y << ", "
-                    << react_forces.z << ", "
-                    << plane_coord.Get_A_Xaxis().x << ", "
-                    << plane_coord.Get_A_Xaxis().y << ", "
-                    << plane_coord.Get_A_Xaxis().z << ", "
-                    << plane_coord.Get_A_Yaxis().x << ", "
-                    << plane_coord.Get_A_Yaxis().y << ", "
-                    << plane_coord.Get_A_Yaxis().z << ", "
-                    << plane_coord.Get_A_Zaxis().x << ", "
-                    << plane_coord.Get_A_Zaxis().y << ", "
-                    << plane_coord.Get_A_Zaxis().z << "\n";
+                    << pA.x() << ", " 
+                    << pA.y() << ", " 
+                    << pA.z() << ", " 
+                    << react_forces.x() << ", "
+                    << react_forces.y() << ", "
+                    << react_forces.z() << ", "
+                    << plane_coord.Get_A_Xaxis().x() << ", "
+                    << plane_coord.Get_A_Xaxis().y() << ", "
+                    << plane_coord.Get_A_Xaxis().z() << ", "
+                    << plane_coord.Get_A_Yaxis().x() << ", "
+                    << plane_coord.Get_A_Yaxis().y() << ", "
+                    << plane_coord.Get_A_Yaxis().z() << ", "
+                    << plane_coord.Get_A_Zaxis().x() << ", "
+                    << plane_coord.Get_A_Zaxis().y() << ", "
+                    << plane_coord.Get_A_Zaxis().z() << "\n";
         /*
         GetLog() << "ReportContactCallback! \n";
         GetLog() << plane_coord;
@@ -597,7 +597,7 @@ int main(int argc, char* argv[]) {
     // Prepare the physical system for the simulation
 
     //mphysicalSystem.SetLcpSolverType(ChSystem::SOLVER_SOR);  // less precise, faster
-    mphysicalSystem.SetSolverType(ChSystem::SOLVER_BARZILAIBORWEIN); // precise, slower
+    mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
 
     //mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.02); 
     mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.001); 
@@ -647,13 +647,13 @@ int main(int argc, char* argv[]) {
             ChSystem::IteratorBodies mbodies = mphysicalSystem.IterBeginBodies();
             while (mbodies != mphysicalSystem.IterEndBodies()) {
                 result_bodies   << (*mbodies)->GetIdentifier()  << ", " 
-                                << (*mbodies)->GetPos().x  << ", "
-                                << (*mbodies)->GetPos().y  << ", "
-                                << (*mbodies)->GetPos().z  << ", "
-                                << (*mbodies)->GetRot().e0  << ", "
-                                << (*mbodies)->GetRot().e1  << ", "
-                                << (*mbodies)->GetRot().e2  << ", "
-                                << (*mbodies)->GetRot().e3  << ", "
+                                << (*mbodies)->GetPos().x()  << ", "
+                                << (*mbodies)->GetPos().y()  << ", "
+                                << (*mbodies)->GetPos().z()  << ", "
+                                << (*mbodies)->GetRot().e0()  << ", "
+                                << (*mbodies)->GetRot().e1()  << ", "
+                                << (*mbodies)->GetRot().e2()  << ", "
+                                << (*mbodies)->GetRot().e3()  << ", "
                                 << (*mbodies)->GetRotAngle() * CH_C_RAD_TO_DEG  << "\n";
                 ++mbodies;
             }
@@ -667,12 +667,12 @@ int main(int argc, char* argv[]) {
                 if (auto mspring = std::dynamic_pointer_cast<ChLinkSpring>((*mlink)))
                 result_springs  << mspring->GetIdentifier()  << ", " 
                                 << mspring->Get_SpringReact()  << ", "
-                                << mspring->GetMarker1()->GetAbsCoord().pos.x << ", "
-                                << mspring->GetMarker1()->GetAbsCoord().pos.y << ", "
-                                << mspring->GetMarker1()->GetAbsCoord().pos.z << ", "
-                                << mspring->GetMarker2()->GetAbsCoord().pos.x << ", "
-                                << mspring->GetMarker2()->GetAbsCoord().pos.y << ", "
-                                << mspring->GetMarker2()->GetAbsCoord().pos.z << ", "
+                                << mspring->GetMarker1()->GetAbsCoord().pos.x() << ", "
+                                << mspring->GetMarker1()->GetAbsCoord().pos.y() << ", "
+                                << mspring->GetMarker1()->GetAbsCoord().pos.z() << ", "
+                                << mspring->GetMarker2()->GetAbsCoord().pos.x() << ", "
+                                << mspring->GetMarker2()->GetAbsCoord().pos.y() << ", "
+                                << mspring->GetMarker2()->GetAbsCoord().pos.z() << ", "
                                 << "\n";
                 ++mlink;
             }
