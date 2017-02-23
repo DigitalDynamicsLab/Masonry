@@ -46,13 +46,14 @@ double GLOBAL_max_simulation_time = 30.0;
 bool   GLOBAL_load_forces = true; 
 bool   GLOBAL_swap_zy = false;
 
-ChFunction_Recorder GLOBAL_motion_X; // motion on x direction
-ChFunction_Recorder GLOBAL_motion_Y; // motion on y (vertical) direction
-ChFunction_Recorder GLOBAL_motion_Z; // motion on z direction
+std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_X; // motion on x direction
+std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Y; // motion on y (vertical) direction
+std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Z; // motion on z direction
 double GLOBAL_motion_timestep = 0.01; // timestep for sampled earthquake motion 
+double GLOBAL_motion_amplifier = 1.0; // scale x,y,z motion by this factor
 double GLOBAL_timestep = 0.001; // timestep for timestepper integrator
 bool GLOBAL_use_motions = false;
-
+int GLOBAL_iterations = 500;
 
 // Load brick pattern from disk
 // Create a bunch of ChronoENGINE rigid bodies 
@@ -166,9 +167,9 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
                     std::shared_ptr<ChLinkLockLock> link_earthquake (new ChLinkLockLock);
                     link_earthquake->Initialize(my_body, absolute_body, ChCoordsys<>(my_body->GetPos()) );
-                    link_earthquake->SetMotion_X(&GLOBAL_motion_X);
-                    link_earthquake->SetMotion_Y(&GLOBAL_motion_Y);
-                    link_earthquake->SetMotion_Z(&GLOBAL_motion_Z);
+                    link_earthquake->SetMotion_X(GLOBAL_motion_X);
+                    link_earthquake->SetMotion_Y(GLOBAL_motion_Y);
+                    link_earthquake->SetMotion_Z(GLOBAL_motion_Z);
 
                     mphysicalSystem.Add(link_earthquake);
                 }
@@ -186,7 +187,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
 	} // end while
 
-    GetLog() << " ...ok, parsed " << filename << " brick file successfully \n";
+    GetLog() << " ...ok, parsed " << filename << " brick file successfully, created " << added_bricks << " bricks.\n";
 }
 
 
@@ -283,7 +284,7 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 
 	} // end while
 
-    GetLog() << " ...ok, parsed " << filename << " spring file successfully \n";
+    GetLog() << " ...ok, parsed " << filename << " spring file successfully, created " << added_springs  << " springs.\n";
 }
 
 
@@ -291,7 +292,7 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 // Load seismic displacement function
 // from ascii file, each row is a value followed by CR. Time step is assumed constant.
 
-void load_motion(ChFunction_Recorder* mrecorder, std::string filename_pos, double t_offset = 0, double factor =1.0, double timestep = 0.01)
+void load_motion(std::shared_ptr<ChFunction_Recorder> mrecorder, std::string filename_pos, double t_offset = 0, double factor =1.0, double timestep = 0.01)
 {
     GetLog() << "Parsing " << filename_pos << " motion file... \n";
 
@@ -308,7 +309,7 @@ void load_motion(ChFunction_Recorder* mrecorder, std::string filename_pos, doubl
 			//mstream >> time;
 			mstream >> value;
 
-			GetLog() << "  t=" << time + t_offset << "  p=" << value * factor << "\n";
+			//GetLog() << "  t=" << time + t_offset << "  p=" << value * factor << "\n";
 
 			mrecorder->AddPoint(time + t_offset, value * factor);
             time += timestep;
@@ -319,7 +320,7 @@ void load_motion(ChFunction_Recorder* mrecorder, std::string filename_pos, doubl
 			break;
 		}
 	}
-	GetLog() << " ...ok, parsed " << filename_pos << " motion file successfully \n";
+	GetLog() << " ...ok, parsed " << filename_pos << " motion file successfully: " << mrecorder->GetPoints().size() << " samples with dt=" << timestep << "\n";
 }
 
 
@@ -454,6 +455,10 @@ class _contact_reporter_class : public  chrono::ChReportContactCallback
 
 int main(int argc, char* argv[]) {
 
+    GLOBAL_motion_X = std::make_shared<ChFunction_Recorder>();
+    GLOBAL_motion_Y = std::make_shared<ChFunction_Recorder>();
+    GLOBAL_motion_Z = std::make_shared<ChFunction_Recorder>();
+
     // Parse input command
 
     char* filename = "bricks.dat"; // commento per Vale: variabile stringa, inizializzata a default
@@ -486,9 +491,17 @@ int main(int argc, char* argv[]) {
             got_command = true;
             GLOBAL_motion_timestep = atof(argument.c_str());
         }
+        if (command == "motion_amplifier")  {
+            got_command = true;
+            GLOBAL_motion_amplifier = atof(argument.c_str());
+        }
         if (command == "dt")  {
             got_command = true;
             GLOBAL_timestep = atof(argument.c_str());
+        }
+        if (command == "iterations")  {
+            got_command = true;
+            GLOBAL_iterations = atof(argument.c_str());
         }
         if (command == "T_max")  {
             got_command = true;
@@ -546,15 +559,15 @@ int main(int argc, char* argv[]) {
 
     // Create the motion functions, if any
     if (file_motion_x != "") {
-        load_motion(&GLOBAL_motion_X, file_motion_x.c_str(), 0, 1, GLOBAL_motion_timestep);
+        load_motion(GLOBAL_motion_X, file_motion_x.c_str(), 0, GLOBAL_motion_amplifier, GLOBAL_motion_timestep);
         GLOBAL_use_motions = true;
     }
     if (file_motion_y != "") {
-        load_motion(&GLOBAL_motion_Y, file_motion_y.c_str(), 0, 1, GLOBAL_motion_timestep);
+        load_motion(GLOBAL_motion_Y, file_motion_y.c_str(), 0, GLOBAL_motion_amplifier, GLOBAL_motion_timestep);
         GLOBAL_use_motions = true;
     }
     if (file_motion_z != "") {
-        load_motion(&GLOBAL_motion_Z, file_motion_z.c_str(), 0, 1, GLOBAL_motion_timestep);
+        load_motion(GLOBAL_motion_Z, file_motion_z.c_str(), 0, GLOBAL_motion_amplifier, GLOBAL_motion_timestep);
         GLOBAL_use_motions = true;
     }
 
@@ -601,7 +614,7 @@ int main(int argc, char* argv[]) {
 
     //mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.02); 
     mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.001); 
-    mphysicalSystem.SetMaxItersSolverSpeed(500);
+    mphysicalSystem.SetMaxItersSolverSpeed(GLOBAL_iterations);
     mphysicalSystem.SetSolverWarmStarting(true);
 
     //
@@ -610,7 +623,7 @@ int main(int argc, char* argv[]) {
 
 
     application.SetTimestep(GLOBAL_timestep);
-    application.SetPaused(true);
+    //application.SetPaused(true);
 
     if (GLOBAL_snapshot_each >0) {
         application.SetVideoframeSave(true);
