@@ -643,7 +643,7 @@ int main(int argc, char* argv[]) {
 
 
         // Do some output to disk, for later postprocessing
-        if (mphysicalSystem.GetStepcount() % GLOBAL_save_each  == 0)
+        if (GLOBAL_save_each && (mphysicalSystem.GetStepcount() % GLOBAL_save_each  == 0))
         {
             // a) Use the contact callback object to save contacts:
             char contactfilename[200];
