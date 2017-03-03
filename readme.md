@@ -33,8 +33,8 @@ where
 - **motion_amplifier [a]**  tells how much the displacements in the motion files are multiplied. Default is 1, so displacements are kept unaltered, as in the input file.
 - **dt [dt]**  is the timestep for the time integration; the larger the faster the simulation, but less precise. Default: 0.001 seconds.
 - **T_max [t]**  tells when the simulator ends the simulation end exits. Default: 30 seconds.
-- **save_each [n]** tells that the simulator will output on the disk a triplet of result files per each *n* timesteps: ex. *save_each 1*  will save  bodies00001.txt  bodies00002.txt ... contacts00001.txt contacts00002.txt ... springs00001.txt springs00002.txt  etc. Files will go into the working directory. Default: does not save. 
-- **snapshot_each [n]** tells that the simulator will save a snapshot of the 3D visualization each *n* timesteps.Snaphsots will go into the /video_capture directory.
+- **save_each [n]** tells that the simulator will output on the disk a triplet of result files per each *n* timesteps: ex. *save_each 1*  will save  bodies00001.txt  bodies00002.txt ... contacts00001.txt contacts00002.txt ... springs00001.txt springs00002.txt  etc. Files will go into the working directory. Use 0 to disable saving. Default: save each 10 steps. 
+- **snapshot_each [n]** tells that the simulator will save a snapshot of the 3D visualization each *n* timesteps.Snaphsots will go into the /video_capture directory. Default = 0 (do not save).
 
 
 This is an example of command line on my system:
