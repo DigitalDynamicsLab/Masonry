@@ -529,17 +529,6 @@ int main(int argc, char* argv[]) {
     // Create a ChronoENGINE physical system
     ChSystem mphysicalSystem;
 
-    // Create the Irrlicht visualization (open the Irrlicht device,
-    // bind a simple user interface, etc. etc.)
-    ChIrrApp application(&mphysicalSystem, L"Bricks test", core::dimension2d<u32>(1280, 720), false, true);
-
-    // Easy shortcuts to add camera, lights, logo and sky in Irrlicht scene:
-    ChIrrWizard::add_typical_Logo(application.GetDevice());
-    ChIrrWizard::add_typical_Sky(application.GetDevice());
-    ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
-                                    core::vector3df(30.f, 80.f, 60.f), 290, 190);
-    ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(0, 1.6, 10), core::vector3df(0, 1.6, -3));
-
     // Here set the inward-outward margins for collision shapes:
     collision::ChCollisionModel::SetDefaultSuggestedEnvelope(0.01);
     collision::ChCollisionModel::SetDefaultSuggestedMargin(0.005);
@@ -592,6 +581,17 @@ int main(int argc, char* argv[]) {
             system("pause");
         }
 
+
+    // Create the Irrlicht visualization (open the Irrlicht device,
+    // bind a simple user interface, etc. etc.)
+    ChIrrApp application(&mphysicalSystem, L"Bricks test", core::dimension2d<u32>(1280, 720), false, true);
+
+    // Easy shortcuts to add camera, lights, logo and sky in Irrlicht scene:
+    ChIrrWizard::add_typical_Logo(application.GetDevice());
+    ChIrrWizard::add_typical_Sky(application.GetDevice());
+    ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
+                                    core::vector3df(30.f, 80.f, 60.f), 290, 190);
+    ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(0, 1.6, 10), core::vector3df(0, 1.6, -3));
 
     // Use this function for adding a ChIrrNodeAsset to all items
     // If you need a finer control on which item really needs a visualization proxy in
