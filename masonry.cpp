@@ -605,7 +605,7 @@ int main(int argc, char* argv[]) {
 
     // Set no gravity on Y:
     application.GetSystem()->Set_G_acc(ChVector<>(0,-9.8,0));
-    //application.GetSystem()->Set_G_acc(ChVector<>(0,0,0));
+    //application.GetSystem()->Set_G_acc(ChVector<>(9.8*0.2,-9.8,0));
 
     // Prepare the physical system for the simulation
 
