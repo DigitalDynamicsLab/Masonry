@@ -11,6 +11,7 @@
 #include "chrono/assets/ChPointPointDrawing.h"
 #include "chrono/collision/ChCCollisionSystemBullet.h"
 #include "chrono_irrlicht/ChIrrApp.h"
+#include "chrono/utils/ChCompositeInertia.h"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -45,6 +46,7 @@ int    GLOBAL_snapshot_each = 0;
 double GLOBAL_max_simulation_time = 30.0;
 bool   GLOBAL_load_forces = true; 
 bool   GLOBAL_swap_zy = false;
+double GLOBAL_density = 1800;
 
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_X; // motion on x direction
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Y; // motion on y (vertical) direction
@@ -90,7 +92,8 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 		// a normal line should contain brick data:
 		if (true)
 		{
-			double tokenvals[300];
+			std::vector<double> tokenvals;
+            std::vector<bool>   tokenasterisk;
 			int ntokens = 0;
 
 			std::string token;
@@ -100,15 +103,22 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             // ID, fixed, visible, Fx Fy, Fz, Ref.x, Ref.y, Ref.z, x,y,z, x,y,z, x,y,z, ..,..,..
 			while(std::getline(ss, token,',') && ntokens < 300) 
 			{
+                tokenvals.push_back(0);
+                tokenasterisk.push_back(false);
+
 				std::istringstream stoken(token);
                 //GetLog() << "  token n." << ntokens << " is: "<< stoken.str().c_str() << "\n";
-				stoken >> tokenvals[ntokens]; 
+				if (token == "*") {
+                    tokenasterisk[ntokens] = true; 
+                    tokenvals[ntokens] = 0;
+                }
+                else {
+                    tokenasterisk[ntokens] = false;
+                    stoken >> tokenvals[ntokens]; 
+                }
 				++ntokens;	
 			}
 			++added_bricks;
-
-            if ((ntokens-3) % 3 != 0)
-                throw ChException("ERROR in .dat file, format is: ID, fixed, visible, Fx, Fy, Fz, Refx,Refy,Refz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
 
             int  my_ID    = (int)tokenvals[0];
             bool my_fixed = (bool)tokenvals[1]; 
@@ -131,19 +141,83 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             if (GLOBAL_swap_zy) std::swap(my_reference.y(), my_reference.z());
             token_stride += 3;
             
-            std::vector< ChVector<> > my_vertexes;
-            for (int off = token_stride; off < ntokens; off += 3) {
+            std::vector< std::vector< ChVector<> > > my_vertexes;
+            my_vertexes.push_back(std::vector< ChVector<> >());
+            while (true) {
+                if (token_stride+2 >= ntokens) {
+                    throw ChException("ERROR in .dat file, format is: ID, fixed, visible, Fx, Fy, Fz, Refx,Refy,Refz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
+                    break;
+                }
                 ChVector<> my_point;
-                my_point.x() = tokenvals[off+0];
-                my_point.y() = tokenvals[off+1];
-                my_point.z() = tokenvals[off+2];
+                my_point.x() = tokenvals[token_stride+0];
+                my_point.y() = tokenvals[token_stride+1];
+                my_point.z() = tokenvals[token_stride+2];
+
                 if (GLOBAL_swap_zy) std::swap(my_point.y(), my_point.z());
                 my_point = my_point - my_reference; // chrono want these points in reference system, but in file are in absolute system
-                my_vertexes.push_back(my_point);
+                my_vertexes.back().push_back(my_point);
+                token_stride += 3;
+
+                if (tokenasterisk[token_stride] == true) {
+                    token_stride +=1; // skip asterisk separator, if any
+                    my_vertexes.push_back(std::vector< ChVector<> >()); // begin other list of convex hulls
+                }
+                if (token_stride == ntokens)
+                    break;
             }
 
             // Create a polygonal body:
-            std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes,1500,true, my_visible));
+            //std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes[0],1800,true, my_visible));
+            std::shared_ptr<ChBodyAuxRef> my_body (new ChBodyAuxRef);
+
+            my_body->GetCollisionModel()->ClearModel();
+
+            utils::CompositeInertia composite_inertia;
+
+            for (int ih = 0 ; ih < my_vertexes.size() ; ++ih) {
+
+                auto vshape = std::make_shared<ChTriangleMeshShape>();
+                collision::ChConvexHullLibraryWrapper lh;
+                lh.ComputeHull(my_vertexes[ih], vshape->GetMesh());
+                if (my_visible) {
+                    my_body->AddAsset(vshape);
+                }
+
+                double i_mass;
+                ChVector<> i_baricenter;
+                ChMatrix33<> i_inertia;
+                vshape->GetMesh().ComputeMassProperties(true, i_mass, i_baricenter, i_inertia);
+
+                composite_inertia.AddComponent(ChFrame<>(i_baricenter), i_mass, i_inertia);
+
+                // if collide required
+                if (true) {
+                    // avoid passing to collision the inner points discarded by convex hull
+                    // processor, so use mesh vertexes instead of all argument points
+                    std::vector<ChVector<> > points_reduced;
+                    points_reduced.resize(vshape->GetMesh().getCoordsVertices().size());
+                    for (unsigned int i = 0; i < vshape->GetMesh().getCoordsVertices().size(); ++i)
+                        points_reduced[i] = vshape->GetMesh().getCoordsVertices()[i];
+
+                    my_body->GetCollisionModel()->AddConvexHull(points_reduced);  
+                }
+            }
+
+            ChMatrix33<> principal_inertia_csys;
+            double principal_I[3];
+            composite_inertia.GetInertia().FastEigen(principal_inertia_csys, principal_I);
+
+            my_body->SetDensity((float)GLOBAL_density);
+            my_body->SetMass(composite_inertia.GetMass() * GLOBAL_density);
+            my_body->SetInertiaXX(ChVector<>(principal_I[0] * GLOBAL_density, principal_I[1] * GLOBAL_density, principal_I[2] * GLOBAL_density));
+
+            // Set the COG coordinates to barycenter, without displacing the REF reference
+            my_body->SetFrame_COG_to_REF(ChFrame<>(composite_inertia.GetCOM(), principal_inertia_csys));
+
+
+            my_body->GetCollisionModel()->BuildModel();
+            my_body->SetCollide(true);
+
             my_body->SetIdentifier(my_ID);
             my_body->Set_Scr_force(my_force);
             my_body->SetMaterialSurface(mmaterial);
