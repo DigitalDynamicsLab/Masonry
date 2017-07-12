@@ -5,7 +5,7 @@
 // from www.chronoengine.info
 //
 
-#include "chrono/physics/ChSystem.h"
+#include "chrono/physics/ChSystemNSC.h"
 #include "chrono/physics/ChBodyEasy.h"
 #include "chrono/assets/ChTexture.h"
 #include "chrono/assets/ChPointPointDrawing.h"
@@ -43,7 +43,7 @@ using namespace gui;
 
 int    GLOBAL_save_each = 10;
 int    GLOBAL_snapshot_each = 0;
-double GLOBAL_max_simulation_time = 30.0;
+double GLOBAL_max_simulation_time = 30;
 bool   GLOBAL_load_forces = true; 
 bool   GLOBAL_swap_zy = false;
 double GLOBAL_density = 1800;
@@ -53,7 +53,7 @@ std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Y; // motion on y (vertical) 
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Z; // motion on z direction
 double GLOBAL_motion_timestep = 0.01; // timestep for sampled earthquake motion 
 double GLOBAL_motion_amplifier = 1.0; // scale x,y,z motion by this factor
-double GLOBAL_timestep = 0.001; // timestep for timestepper integrator
+double GLOBAL_timestep = 0.01; // timestep for timestepper integrator
 bool GLOBAL_use_motions = false;
 int GLOBAL_iterations = 500;
 
@@ -403,7 +403,7 @@ void load_motion(std::shared_ptr<ChFunction_Recorder> mrecorder, std::string fil
 
 void create_tile_pattern(ChSystem& mphysicalSystem) {
     // Create a material that will be shared between bricks
-    std::shared_ptr<ChMaterialSurface> mmaterial_brick(new ChMaterialSurface);
+    std::shared_ptr<ChMaterialSurfaceNSC> mmaterial_brick(new ChMaterialSurfaceNSC);
     mmaterial_brick->SetFriction(0.4f);
 
     double bricksize_x = 2;
@@ -452,7 +452,7 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
     // HAHAHA
    
     // Create a material for brick-floor
-    std::shared_ptr<ChMaterialSurface> mmaterial_floor(new ChMaterialSurface);
+    std::shared_ptr<ChMaterialSurfaceNSC> mmaterial_floor(new ChMaterialSurfaceNSC);
     mmaterial_floor->SetFriction(0.4f);
 
     std::shared_ptr<ChBodyEasyBox> mrigidFloor(new ChBodyEasyBox(40, 4, 40,  // x,y,z size
@@ -476,22 +476,20 @@ void create_tile_pattern(ChSystem& mphysicalSystem) {
 
 // This is the contact reporter class, just for writing contacts on 
 // a file on disk
-class _contact_reporter_class : public  chrono::ChReportContactCallback 
+class _contact_reporter_class : public  ChContactContainer::ReportContactCallback
 {
     public:
     ChStreamOutAsciiFile* mfile; // the file to save data into
 
-    virtual bool ReportContactCallback(
-                                const ChVector<>& pA,             ///< get contact pA
-                                const ChVector<>& pB,             ///< get contact pB
-                                const ChMatrix33<>& plane_coord,  ///< get contact plane coordsystem (A column 'X' is contact normal)
-                                const double& distance,           ///< get contact distance
-                                const ChVector<>& react_forces,   ///< get react.forces (if already computed). In coordsystem 'plane_coord'
-                                const ChVector<>& react_torques,  ///< get react.torques, if rolling friction (if already computed).
-                                ChContactable* contactobjA,  ///< get model A (note: some containers may not support it and could be zero!)
-                                ChContactable* contactobjB   ///< get model B (note: some containers may not support it and could be zero!)
-        )
-    {
+	virtual bool OnReportContact(const ChVector<>& pA,
+		const ChVector<>& pB,
+		const ChMatrix33<>& plane_coord,
+		const double& distance,
+		const ChVector<>& react_forces,
+		const ChVector<>& react_torques,
+		ChContactable* contactobjA,
+		ChContactable* contactobjB) override {
+
         // For each contact, this function is executed. 
         // In this example, saves on ascii file:
         //   position xyz, direction xyz, normal impulse, tangent impulse U, tangent impulse V, modelA ID, modelB ID information is saved. 
@@ -601,7 +599,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Create a ChronoENGINE physical system
-    ChSystem mphysicalSystem;
+    ChSystemNSC mphysicalSystem;
 
     // Here set the inward-outward margins for collision shapes:
     collision::ChCollisionModel::SetDefaultSuggestedEnvelope(0.01);
@@ -613,7 +611,7 @@ int main(int argc, char* argv[]) {
     //
 
     // The default material for the bricks:
-    std::shared_ptr<ChMaterialSurface> mmaterial(new ChMaterialSurface);
+    std::shared_ptr<ChMaterialSurfaceNSC> mmaterial(new ChMaterialSurfaceNSC);
     mmaterial->SetFriction(0.4f); // secondo Valentina
     //mmaterial->SetRestitution(0.0f); // either restitution, or compliance&damping, or none, but not both
     mmaterial->SetCompliance(2e-8);
@@ -658,13 +656,13 @@ int main(int argc, char* argv[]) {
 
     // Create the Irrlicht visualization (open the Irrlicht device,
     // bind a simple user interface, etc. etc.)
-    ChIrrApp application(&mphysicalSystem, L"Bricks test", core::dimension2d<u32>(1280, 720), false, true);
+    ChIrrApp application(&mphysicalSystem, L"Bricks test", core::dimension2d<u32>(960, 720), false, true);
 
     // Easy shortcuts to add camera, lights, logo and sky in Irrlicht scene:
     ChIrrWizard::add_typical_Logo(application.GetDevice());
     ChIrrWizard::add_typical_Sky(application.GetDevice());
     ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
-                                    core::vector3df(30.f, 80.f, 60.f), 290, 190);
+                                    core::vector3df(30.f, 80.f, 160.f), 290, 190);
     ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(0, 1.6, 10), core::vector3df(0, 1.6, -3));
 
     // Use this function for adding a ChIrrNodeAsset to all items
