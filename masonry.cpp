@@ -683,9 +683,8 @@ int main(int argc, char* argv[]) {
 
     // Prepare the physical system for the simulation
 
-    //mphysicalSystem.SetLcpSolverType(ChSystem::SOLVER_SOR);  // less precise, faster
+    //mphysicalSystem.SetSolverType(ChSolver::Type::SOLVER_SOR);  // less precise, faster
     mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
-
     //mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.02); 
     mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.001); 
     mphysicalSystem.SetMaxItersSolverSpeed(GLOBAL_iterations);
