@@ -38,8 +38,8 @@ where
 - **snapshot_each [n]** tells that the simulator will save a snapshot of the 3D visualization each *n* timesteps.Snaphsots will go into the /video_capture directory. Default = 0 (do not save).
 - **density [d]** defines the density of the blocks (kg/m^3). Default 1800 kg/m^3.
 - **friction [f]** defines the friction coefficients for the blocks. Default 0.4.
-- **compliance [c]** defines the compliance (m/N), inverse of stiffness, of contact points. Default 2e-8f m/N.
-- **penetrationrecovery** [p]** sets the max speed (m/s) of separation when parts are compenetrating because of integration errors or model errors. Default 0.001 m/s.
+- **compliance [c]** defines the compliance (m/N), inverse of stiffness, of contact points. Default 2e-8f m/N. Small values require small time steps. If zero, it disables compliance at all, and time step can be quite large.
+- **penetrationrecovery [p]** sets the max speed (m/s) of separation when parts are compenetrating because of integration errors or model errors. Default 0.001 m/s.
 
 This is an example of command line on my system:
 
