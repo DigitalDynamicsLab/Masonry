@@ -32,10 +32,14 @@ where
 - **motion_dt  [dt]**  tells the timestep between samples in the motion files motion_X motion_Y and motion_Z. Default is 0.01 seconds.
 - **motion_amplifier [a]**  tells how much the displacements in the motion files are multiplied. Default is 1, so displacements are kept unaltered, as in the input file.
 - **dt [dt]**  is the timestep for the time integration; the larger the faster the simulation, but less precise. Default: 0.001 seconds.
+- **iterations [n]** tells the max number of iterations for the complementarity solver. Default: 500.
 - **T_max [t]**  tells when the simulator ends the simulation end exits. Default: 30 seconds.
 - **save_each [n]** tells that the simulator will output on the disk a triplet of result files per each *n* timesteps: ex. *save_each 1*  will save  bodies00001.txt  bodies00002.txt ... contacts00001.txt contacts00002.txt ... springs00001.txt springs00002.txt  etc. Files will go into the working directory. Use 0 to disable saving. Default: save each 10 steps. 
 - **snapshot_each [n]** tells that the simulator will save a snapshot of the 3D visualization each *n* timesteps.Snaphsots will go into the /video_capture directory. Default = 0 (do not save).
-
+- **density [d]** defines the density of the blocks (kg/m^3). Default 1800 kg/m^3.
+- **friction [f]** defines the friction coefficients for the blocks. Default 0.4.
+- **compliance [c]** defines the compliance (m/N), inverse of stiffness, of contact points. Default 2e-8f m/N.
+- **penetrationrecovery** [p]** sets the max speed (m/s) of separation when parts are compenetrating because of integration errors or model errors. Default 0.001 m/s.
 
 This is an example of command line on my system:
 
