@@ -47,6 +47,9 @@ double GLOBAL_max_simulation_time = 30;
 bool   GLOBAL_load_forces = true; 
 bool   GLOBAL_swap_zy = false;
 double GLOBAL_density = 1800;
+float  GLOBAL_friction = 0.4f;
+float  GLOBAL_compliance = 2e-8f;
+double GLOBAL_penetrationrecovery = 0.001;
 
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_X; // motion on x direction
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Y; // motion on y (vertical) direction
@@ -518,6 +521,22 @@ int main(int argc, char* argv[]) {
             got_command = true;
             file_springs = argument;
         }
+        if (command == "density")  {
+            got_command = true;
+            GLOBAL_density = atof(argument.c_str());
+        }
+        if (command == "friction")  {
+            got_command = true;
+            GLOBAL_friction = atof(argument.c_str());
+        }
+        if (command == "compliance")  {
+            got_command = true;
+            GLOBAL_compliance = atof(argument.c_str());
+        }
+        if (command == "penetrationrecovery")  {
+            got_command = true;
+            GLOBAL_penetrationrecovery = atof(argument.c_str());
+        }
         if (!got_command) {
             GetLog() << "ERROR. Unknown command in input line: " << command << "\n";
             return 0;
@@ -539,10 +558,10 @@ int main(int argc, char* argv[]) {
 
     // The default material for the bricks:
     std::shared_ptr<ChMaterialSurfaceNSC> mmaterial(new ChMaterialSurfaceNSC);
-    mmaterial->SetFriction(0.4f); // secondo Valentina
+    mmaterial->SetFriction(GLOBAL_friction); 
     //mmaterial->SetRestitution(0.0f); // either restitution, or compliance&damping, or none, but not both
-    mmaterial->SetCompliance(2e-8);
-    mmaterial->SetComplianceT(2e-8);
+    mmaterial->SetCompliance(GLOBAL_compliance);
+    mmaterial->SetComplianceT(GLOBAL_compliance);
     mmaterial->SetDampingF(0.2f);
 
     // Create the motion functions, if any
@@ -610,8 +629,8 @@ int main(int argc, char* argv[]) {
 
     //mphysicalSystem.SetSolverType(ChSolver::Type::SOLVER_SOR);  // less precise, faster
     mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
-    //mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.02); 
-    mphysicalSystem.SetMaxPenetrationRecoverySpeed(0.001); 
+
+    mphysicalSystem.SetMaxPenetrationRecoverySpeed(GLOBAL_penetrationrecovery); 
     mphysicalSystem.SetMaxItersSolverSpeed(GLOBAL_iterations);
     mphysicalSystem.SetSolverWarmStarting(true);
 
