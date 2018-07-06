@@ -50,6 +50,7 @@ double GLOBAL_density = 1800;
 float  GLOBAL_friction = 0.4f;
 float  GLOBAL_compliance = 2e-8f;
 double GLOBAL_penetrationrecovery = 0.001;
+bool   GLOBAL_warmstart = false;
 
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_X; // motion on x direction
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Y; // motion on y (vertical) direction
@@ -60,6 +61,8 @@ double GLOBAL_timestep = 0.01; // timestep for timestepper integrator
 bool GLOBAL_use_motions = false;
 int GLOBAL_iterations = 500;
 
+double GLOBAL_totmass = 0;
+
 // Load brick pattern from disk
 // Create a bunch of ChronoENGINE rigid bodies 
 
@@ -68,6 +71,8 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                     std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
 
     GetLog() << "Parsing " << filename << " brick file... \n";
+
+	GLOBAL_totmass = 0;
 
     std::fstream fin(filename);
 	if (!fin.good())
@@ -214,6 +219,11 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             my_body->SetMass(composite_inertia.GetMass() * GLOBAL_density);
             my_body->SetInertiaXX(ChVector<>(principal_I[0] * GLOBAL_density, principal_I[1] * GLOBAL_density, principal_I[2] * GLOBAL_density));
 
+			if (!my_fixed) {
+				GLOBAL_totmass += my_body->GetMass();
+			}
+			//GetLog() << " block mass=" << my_body->GetMass() << "   volume=" << composite_inertia.GetMass() << "\n";
+
             // Set the COG coordinates to barycenter, without displacing the REF reference
             my_body->SetFrame_COG_to_REF(ChFrame<>(composite_inertia.GetCOM(), principal_inertia_csys));
 
@@ -265,6 +275,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 	} // end while
 
     GetLog() << " ...ok, parsed " << filename << " brick file successfully, created " << added_bricks << " bricks.\n";
+	GetLog() << " TOTAL MASS OF NOT FIXED BRICKS: " << GLOBAL_totmass << "\n\n";
 }
 
 
@@ -411,14 +422,17 @@ class _contact_reporter_class : public  ChContactContainer::ReportContactCallbac
     public:
     ChStreamOutAsciiFile* mfile; // the file to save data into
 
-	virtual bool OnReportContact(const ChVector<>& pA,
-		const ChVector<>& pB,
-		const ChMatrix33<>& plane_coord,
-		const double& distance,
-		const ChVector<>& react_forces,
-		const ChVector<>& react_torques,
-		ChContactable* contactobjA,
-		ChContactable* contactobjB) override {
+	virtual bool OnReportContact(
+		const ChVector<>& pA,             ///< contact pA
+		const ChVector<>& pB,             ///< contact pB
+		const ChMatrix33<>& plane_coord,  ///< contact plane coordsystem (A column 'X' is contact normal)
+		const double& distance,           ///< contact distance
+		const double& eff_radius,         ///< effective radius of curvature at contact
+		const ChVector<>& react_forces,   ///< react.forces (if already computed). In coordsystem 'plane_coord'
+		const ChVector<>& react_torques,  ///< react.torques, if rolling friction (if already computed).
+		ChContactable* contactobjA,  ///< model A (note: some containers may not support it and could be nullptr)
+		ChContactable* contactobjB   ///< model B (note: some containers may not support it and could be nullptr)
+	) override {
 
         // For each contact, this function is executed. 
         // In this example, saves on ascii file:
@@ -537,6 +551,10 @@ int main(int argc, char* argv[]) {
             got_command = true;
             GLOBAL_penetrationrecovery = atof(argument.c_str());
         }
+		if (command == "warmstart") {
+			got_command = true;
+			GLOBAL_warmstart = atoi(argument.c_str());
+		}
         if (!got_command) {
             GetLog() << "ERROR. Unknown command in input line: " << command << "\n";
             return 0;
@@ -610,8 +628,11 @@ int main(int argc, char* argv[]) {
     ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
                                     core::vector3df(30.f, 80.f, 160.f), 290, 190);
     ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(0, 1.6, 10), core::vector3df(0, 1.6, -3));
-
-    // Use this function for adding a ChIrrNodeAsset to all items
+	
+	application.SetSymbolscale(5e-5);
+	application.SetContactsDrawMode(ChIrrTools::CONTACT_FORCES);
+	
+	// Use this function for adding a ChIrrNodeAsset to all items
     // If you need a finer control on which item really needs a visualization proxy in
     // Irrlicht, just use application.AssetBind(myitem); on a per-item basis.
     application.AssetBindAll();
@@ -632,7 +653,7 @@ int main(int argc, char* argv[]) {
 
     mphysicalSystem.SetMaxPenetrationRecoverySpeed(GLOBAL_penetrationrecovery); 
     mphysicalSystem.SetMaxItersSolverSpeed(GLOBAL_iterations);
-    mphysicalSystem.SetSolverWarmStarting(true);
+    mphysicalSystem.SetSolverWarmStarting(GLOBAL_warmstart);
 
     //
     // THE SOFT-REAL-TIME CYCLE
@@ -674,8 +695,8 @@ int main(int argc, char* argv[]) {
             char bodyfilename[200];
             sprintf(bodyfilename, "%s%05d%s", "bodies", mphysicalSystem.GetStepcount(), ".txt");  // ex: bodies00020.tx
             ChStreamOutAsciiFile result_bodies(bodyfilename);
-            ChSystem::IteratorBodies mbodies = mphysicalSystem.IterBeginBodies();
-            while (mbodies != mphysicalSystem.IterEndBodies()) {
+			auto mbodies = mphysicalSystem.Get_bodylist().begin(); 
+            while (mbodies != mphysicalSystem.Get_bodylist().end()) {
                 result_bodies   << (*mbodies)->GetIdentifier()  << ", " 
                                 << (*mbodies)->GetPos().x()  << ", "
                                 << (*mbodies)->GetPos().y()  << ", "
@@ -692,8 +713,8 @@ int main(int argc, char* argv[]) {
             char springfilename[200];
             sprintf(springfilename, "%s%05d%s", "springs", mphysicalSystem.GetStepcount(), ".txt");  // ex: springs00020.tx
             ChStreamOutAsciiFile result_springs(springfilename);
-            ChSystem::IteratorLinks mlink = mphysicalSystem.IterBeginLinks();
-            while (mlink != mphysicalSystem.IterEndLinks()) {
+            auto mlink = mphysicalSystem.Get_linklist().begin();
+            while (mlink != mphysicalSystem.Get_linklist().end()) {
                 if (auto mspring = std::dynamic_pointer_cast<ChLinkSpring>((*mlink)))
                 result_springs  << mspring->GetIdentifier()  << ", " 
                                 << mspring->Get_SpringReact()  << ", "

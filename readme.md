@@ -39,7 +39,9 @@ where
 - **density [d]** defines the density of the blocks (kg/m^3). Default 1800 kg/m^3.
 - **friction [f]** defines the friction coefficients for the blocks. Default 0.4.
 - **compliance [c]** defines the compliance (m/N), inverse of stiffness, of contact points. Default 2e-8f m/N.
-- **penetrationrecovery** [p]** sets the max speed (m/s) of separation when parts are compenetrating because of integration errors or model errors. Default 0.001 m/s.
+- **penetrationrecovery [p]** sets the max speed (m/s) of separation when parts are compenetrating because of integration errors or model errors. Default 0.001 m/s. Do not use, or use high values, if non-zero compliance.
+- **warmstart** can be 0 (off) or 1 (on). In some cases might speed up the convergence of the solver. Default 0.
+
 
 This is an example of command line on my system:
 
