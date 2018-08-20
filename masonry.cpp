@@ -48,7 +48,12 @@ bool   GLOBAL_load_forces = true;
 bool   GLOBAL_swap_zy = false;
 double GLOBAL_density = 1800;
 float  GLOBAL_friction = 0.4f;
+float  GLOBAL_damping =  0.2f;
 float  GLOBAL_compliance = 2e-8f;
+float  GLOBAL_rolling_friction = 0;
+float  GLOBAL_spinning_friction = 0;
+float  GLOBAL_rolling_compliance = 0;
+float  GLOBAL_spinning_compliance = 0;
 double GLOBAL_penetrationrecovery = 0.001;
 bool   GLOBAL_warmstart = false;
 
@@ -543,10 +548,30 @@ int main(int argc, char* argv[]) {
             got_command = true;
             GLOBAL_friction = atof(argument.c_str());
         }
+		if (command == "rolling_friction") {
+			got_command = true;
+			GLOBAL_rolling_friction = atof(argument.c_str());
+		}
+		if (command == "spinning_friction") {
+			got_command = true;
+			GLOBAL_spinning_friction = atof(argument.c_str());
+		}
+		if (command == "damping") {
+			got_command = true;
+			GLOBAL_damping = atof(argument.c_str());
+		}
         if (command == "compliance")  {
             got_command = true;
             GLOBAL_compliance = atof(argument.c_str());
         }
+		if (command == "rolling_compliance") {
+			got_command = true;
+			GLOBAL_rolling_compliance = atof(argument.c_str());
+		}
+		if (command == "spinning_compliance") {
+			got_command = true;
+			GLOBAL_spinning_compliance = atof(argument.c_str());
+		}
         if (command == "penetrationrecovery")  {
             got_command = true;
             GLOBAL_penetrationrecovery = atof(argument.c_str());
@@ -580,7 +605,11 @@ int main(int argc, char* argv[]) {
     //mmaterial->SetRestitution(0.0f); // either restitution, or compliance&damping, or none, but not both
     mmaterial->SetCompliance(GLOBAL_compliance);
     mmaterial->SetComplianceT(GLOBAL_compliance);
-    mmaterial->SetDampingF(0.2f);
+    mmaterial->SetDampingF(GLOBAL_damping);
+	mmaterial->SetRollingFriction(GLOBAL_rolling_friction);
+	mmaterial->SetSpinningFriction(GLOBAL_spinning_friction);
+	mmaterial->SetComplianceRolling(GLOBAL_rolling_compliance);
+	mmaterial->SetComplianceSpinning(GLOBAL_spinning_compliance);
 
     // Create the motion functions, if any
     if (file_motion_x != "") {
