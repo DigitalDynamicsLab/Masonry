@@ -27,6 +27,7 @@ There are optional parameters that you can enter in the command line (one or mor
 where 
 - **[brickfile.txt]**  is your file containing the positions and shapes of the blocks (see the format below)
 - **springs [springfile.txt]** defines an optional file containing spring bars between blocks (see the format below), ex.  *springs my_springs.txt* 
+- **precomputed_contacts [contactfile.txt]** defines an optional file with precomputed contact positions and normals at t=0. If so, it overrides collision detection. Note: only for statics, do not use if structures must collapse or move, because contacts will stick in original places.
 - **motion_X [motionfilex.txt]**  defines an optional file containing the displacement of the blocks marked as 'fixed', i.e. the ground blocks, to simulate earthquake (see the format below). Ex.: *motion_X my_motion.txt* 
 - same for **motion_Y** and **motion_Z** , note Y is up.
 - **motion_dt  [dt]**  tells the timestep between samples in the motion files motion_X motion_Y and motion_Z. Default is 0.01 seconds.
@@ -46,6 +47,8 @@ where
 - **spinning_compliance [sc]** optional, use only if spinning_friction >0. Units: rad/Nm. Default 0. 
 - **penetrationrecovery [p]** sets the max speed (m/s) of separation when parts are compenetrating because of integration errors or model errors. Default 0.001 m/s. Do not use, or use high values, if non-zero compliance.
 - **warmstart** can be 0 (off) or 1 (on). In some cases might speed up the convergence of the solver. Default 0.
+- **SOR_solver** can be 0 (off) or 1 (on) to use the symmetric SOR solver. Default 0, so the default solver is the SPG Barzilai-Borwein, slower than SOR  but more precise.
+
 
 
 This is an example of command line on my system:
@@ -86,6 +89,20 @@ where:
 - *Bx,By,Bz*  is the position of the anchoring point of the spring on the second body, in absolute coordinate frame, in meters.
 - *k* is the stiffness of the spring in Newton/meter 
 - *L0* is the undeformed length of the spring (if the spring is created with two ends whose distance is different than L0, the spring will be pre-stressed, then)
+
+## Input file format for precomputed contacts
+  
+Sometimes the collision detection algorithm has difficulties in placing the proper amount of contacts, exp.for cases with coplanar faces, degenerate geometries, etc. If so, a possibility is using a precomputed set of contacts, that one can obtain by hand work or via a CAD. Of course this can be used if the structure is static, i.e. it does not move or collapse, because contacts will stick to their bodies during motion even if there should be some sliding. 
+If this feature is needed, the (optional) file for the precomputed contacts at t=0 is an ASCII file, with a row per each contact, each row being a sequence of comma separated values like this:
+
+    IDbodyA, IDbodyB, Px,Py,Pz, Nx,Ny,Nz
+    
+where:
+- *IDbodyA* is the identifier of the first of the two contacting bodies
+- *IDbodyB* is the identifier of the first of the two contacting bodies
+- *Px,Py,Pz*  is the position of the contact point in absolute reference, at t=0, in meters.
+- *Nx,Ny,Nz*  is the normal of the contact point in absolute reference, at t=0, in meters, assumed pointing out from body A.
+
 
 
 ## Output file format for blocks
