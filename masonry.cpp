@@ -393,7 +393,10 @@ public:
 	{
 		rel_pos_A = bodyA->TransformPointParentToLocal(pos_t0);
 		rel_pos_B = bodyB->TransformPointParentToLocal(pos_t0);
-		rel_normal_A = bodyA->TransformDirectionParentToLocal(pos_t0);
+		rel_normal_A = bodyA->TransformDirectionParentToLocal(mnormal_t0);
+		reaction_cache[0] = 0;
+		reaction_cache[1] = 0;
+		reaction_cache[2] = 0;
 	}
 
 	// For time different than t0, absolute position of contact points might change from the mpos_t0 initial
