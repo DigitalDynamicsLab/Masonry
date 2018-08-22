@@ -173,12 +173,14 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 my_vertexes.back().push_back(my_point);
                 token_stride += 3;
 
+				if (token_stride == ntokens)
+					break;
+
                 if (tokenasterisk[token_stride] == true) {
                     token_stride +=1; // skip asterisk separator, if any
                     my_vertexes.push_back(std::vector< ChVector<> >()); // begin other list of convex hulls
                 }
-                if (token_stride == ntokens)
-                    break;
+                
             }
 
             // Create a polygonal body:
