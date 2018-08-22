@@ -415,10 +415,13 @@ public:
 		minfo.vpA = bodyA->TransformPointLocalToParent(rel_pos_A);
 		minfo.vpB = bodyB->TransformPointLocalToParent(rel_pos_B);
 		minfo.vN  = bodyA->TransformDirectionLocalToParent(rel_normal_A);
+		minfo.distance = Vdot(minfo.vpB - minfo.vpA, minfo.vN);
+		minfo.reaction_cache = this->reaction_cache;
 		return minfo;
 	}
 
 private:
+	float reaction_cache[3];
 	ChVector<> pos_t0;
 	ChVector<> normal_t0;
 	std::shared_ptr<ChBody> bodyA;
@@ -790,13 +793,13 @@ int main(int argc, char* argv[]) {
 
 	// Create all the precomputed contacts from disk
 	std::vector<PrecomputedContact> precomputed_contacts;
-	std::shared_ptr<ChContactContainerNSC> contact_container;
+	std::shared_ptr<ChContactContainerNSC> precomputed_contact_container;
 
 	if (file_contacts != "")
 			try {
 			load_contacts_file(mphysicalSystem, file_contacts, my_body_map, precomputed_contacts);
-			contact_container = std::make_shared<ChContactContainerNSC>();
-			mphysicalSystem.Add(contact_container);
+			precomputed_contact_container = std::make_shared<ChContactContainerNSC>();
+			mphysicalSystem.Add(precomputed_contact_container);
 		}
 		catch (ChException my_load_error) {
 			GetLog() << my_load_error.what();
@@ -865,13 +868,13 @@ int main(int argc, char* argv[]) {
                              ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),
                              video::SColor(50, 90, 90, 150), true);
 
-		if (contact_container) {
-			contact_container->BeginAddContact();
+		// Populate precomputed contacts  if a file of contacts at t=0 is provided.
+		if (precomputed_contact_container) {
+			precomputed_contact_container->BeginAddContact();
 			for (int i = 0; i < precomputed_contacts.size(); ++i) {
-				
-				contact_container->AddContact( precomputed_contacts[i].GetCollisionInfo() );
+				precomputed_contact_container->AddContact( precomputed_contacts[i].GetCollisionInfo() );
 			}
-			contact_container->EndAddContact();
+			precomputed_contact_container->EndAddContact();
 		}
 
 
@@ -888,6 +891,8 @@ int main(int argc, char* argv[]) {
             ChStreamOutAsciiFile result_contacts(contactfilename);
             my_contact_rep.mfile = &result_contacts;
             mphysicalSystem.GetContactContainer()->ReportAllContacts(&my_contact_rep);
+			if (precomputed_contact_container)
+				precomputed_contact_container->ReportAllContacts(&my_contact_rep);
 
             // b) Save rigid body positions and rotations
             char bodyfilename[200];
