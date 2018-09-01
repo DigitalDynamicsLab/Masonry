@@ -393,7 +393,7 @@ public:
 	{
 		rel_pos_A = bodyA->TransformPointParentToLocal(pos_t0);
 		rel_pos_B = bodyB->TransformPointParentToLocal(pos_t0);
-		rel_normal_A = bodyA->TransformDirectionParentToLocal(mnormal_t0);
+		rel_normal_A = bodyA->TransformDirectionParentToLocal(normal_t0);
 		reaction_cache[0] = 0;
 		reaction_cache[1] = 0;
 		reaction_cache[2] = 0;
@@ -420,7 +420,7 @@ public:
 		return minfo;
 	}
 
-private:
+//private:
 	float reaction_cache[3];
 	ChVector<> pos_t0;
 	ChVector<> normal_t0;
@@ -439,7 +439,7 @@ void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 	if (!fin.good())
 		throw ChException("ERROR opening .dat file with precomputed contacts: " + filename + "\n");
 
-	int added_springs = 0;
+	int added_contacts = 0;
 
 	std::string line;
 
@@ -475,7 +475,7 @@ void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 				stoken >> tokenvals[ntokens];
 				++ntokens;
 			}
-			++added_springs;
+			++added_contacts;
 
 			if (ntokens != 8)
 				throw ChException("ERROR in .dat file of contacts, format is: IDbodyA, IDbodyB, x,y,z, Nx,Ny,Nz but here is:\n" + line + "\n");
@@ -504,13 +504,13 @@ void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 			std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
 			std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
 
-			PrecomputedContact mcontact(mbodyA, mbodyB, my_abspos, my_absnorm);
+			PrecomputedContact mcontact(mbodyA, mbodyB, my_abspos, (my_absnorm - my_abspos).GetNormalized() );
 			mprecomputed_contacts.push_back(mcontact);
 		}
 
 	} // end while
 
-	GetLog() << " ...ok, parsed " << filename << " spring file successfully, created " << added_springs << " springs.\n";
+	GetLog() << " ...ok, parsed " << filename << " contacts file successfully, created " << added_contacts << " contacts.\n";
 }
 
 
@@ -876,8 +876,20 @@ int main(int argc, char* argv[]) {
 			}
 			precomputed_contact_container->EndAddContact();
 		}
-
-
+		ChIrrTools::drawAllContactPoints(precomputed_contact_container, application.GetVideoDriver(), 0.2, ChIrrTools::CONTACT_NORMALS);
+		/*
+		application.GetVideoDriver()->setTransform(irr::video::ETS_WORLD, irr::core::matrix4());
+		irr::video::SMaterial mattransp;
+		mattransp.ZBuffer = false;
+		mattransp.Lighting = false;
+		application.GetVideoDriver()->setMaterial(mattransp);
+		for (auto precompocont : precomputed_contacts) {
+			irr::video::SColor mcol(200, 250, 250, 0);  // yellow vectors
+			ChVector<> v1abs = precompocont.pos_t0;
+			ChVector<> v2abs = precompocont.pos_t0 + precompocont.normal_t0;
+			application.GetVideoDriver()->draw3DLine(irr::core::vector3dfCH(v1abs), irr::core::vector3dfCH(v2abs), mcol);
+		}
+		*/
         application.DoStep();
 
 
