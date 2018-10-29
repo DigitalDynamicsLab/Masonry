@@ -195,7 +195,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
                 auto vshape = std::make_shared<ChTriangleMeshShape>();
                 collision::ChConvexHullLibraryWrapper lh;
-                lh.ComputeHull(my_vertexes[ih], vshape->GetMesh());
+                lh.ComputeHull(my_vertexes[ih], *vshape->GetMesh());
                 if (my_visible) {
                     my_body->AddAsset(vshape);
                 }
@@ -203,7 +203,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 double i_mass;
                 ChVector<> i_baricenter;
                 ChMatrix33<> i_inertia;
-                vshape->GetMesh().ComputeMassProperties(true, i_mass, i_baricenter, i_inertia);
+                vshape->GetMesh()->ComputeMassProperties(true, i_mass, i_baricenter, i_inertia);
 
                 composite_inertia.AddComponent(ChFrame<>(i_baricenter), i_mass, i_inertia);
 
@@ -212,9 +212,9 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                     // avoid passing to collision the inner points discarded by convex hull
                     // processor, so use mesh vertexes instead of all argument points
                     std::vector<ChVector<> > points_reduced;
-                    points_reduced.resize(vshape->GetMesh().getCoordsVertices().size());
-                    for (unsigned int i = 0; i < vshape->GetMesh().getCoordsVertices().size(); ++i)
-                        points_reduced[i] = vshape->GetMesh().getCoordsVertices()[i];
+                    points_reduced.resize(vshape->GetMesh()->getCoordsVertices().size());
+                    for (unsigned int i = 0; i < vshape->GetMesh()->getCoordsVertices().size(); ++i)
+                        points_reduced[i] = vshape->GetMesh()->getCoordsVertices()[i];
 
                     my_body->GetCollisionModel()->AddConvexHull(points_reduced);  
                 }
@@ -504,7 +504,7 @@ void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 			std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
 			std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
 
-			PrecomputedContact mcontact(mbodyA, mbodyB, my_abspos, (my_absnorm - my_abspos).GetNormalized() );
+			PrecomputedContact mcontact(mbodyA, mbodyB, my_abspos, my_absnorm.GetNormalized() );
 			mprecomputed_contacts.push_back(mcontact);
 		}
 
