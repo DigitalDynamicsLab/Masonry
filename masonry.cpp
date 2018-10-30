@@ -104,7 +104,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
             // parse line in format:
             // ID, fixed, visible, Fx Fy, Fz, Ref.x, Ref.y, Ref.z, x,y,z, x,y,z, x,y,z, ..,..,..
-			while(std::getline(ss, token,',') && ntokens < 300) 
+			while(std::getline(ss, token,',') && ntokens < 1200) 
 			{
                 tokenvals.push_back(0);
                 tokenasterisk.push_back(false);
@@ -301,7 +301,7 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 		// a normal line should contain brick data:
 		if (true)
 		{
-			double tokenvals[300];
+			double tokenvals[500];
 			int ntokens = 0;
 
 			std::string token;
@@ -309,7 +309,7 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 
             // parse line in format:
             // ID, IDbodyA, x,y,z, IDbodyB, x,y,z,  k, L0
-			while(std::getline(ss, token,',') && ntokens < 300) 
+			while(std::getline(ss, token,',') && ntokens < 700) 
 			{
 				std::istringstream stoken(token);
 				stoken >> tokenvals[ntokens]; 
