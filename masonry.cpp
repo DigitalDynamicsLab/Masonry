@@ -6,6 +6,7 @@
 //
 
 #include "chrono/physics/ChSystemNSC.h"
+#include "chrono/physics/ChContactContainerNSC.h"
 #include "chrono/physics/ChBodyEasy.h"
 #include "chrono/assets/ChTexture.h"
 #include "chrono/assets/ChPointPointDrawing.h"
@@ -48,8 +49,14 @@ bool   GLOBAL_load_forces = true;
 bool   GLOBAL_swap_zy = false;
 double GLOBAL_density = 1800;
 float  GLOBAL_friction = 0.4f;
+float  GLOBAL_damping =  0.2f;
 float  GLOBAL_compliance = 2e-8f;
+float  GLOBAL_rolling_friction = 0;
+float  GLOBAL_spinning_friction = 0;
+float  GLOBAL_rolling_compliance = 0;
+float  GLOBAL_spinning_compliance = 0;
 double GLOBAL_penetrationrecovery = 0.001;
+bool   GLOBAL_warmstart = false;
 
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_X; // motion on x direction
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Y; // motion on y (vertical) direction
@@ -60,14 +67,19 @@ double GLOBAL_timestep = 0.01; // timestep for timestepper integrator
 bool GLOBAL_use_motions = false;
 int GLOBAL_iterations = 500;
 
+double GLOBAL_totmass = 0;
+
 // Load brick pattern from disk
 // Create a bunch of ChronoENGINE rigid bodies 
 
 void load_brick_file(ChSystem& mphysicalSystem, const char* filename, 
                     std::shared_ptr<ChMaterialSurface> mmaterial, 
-                    std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
+                    std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map,
+					bool do_collide) {
 
     GetLog() << "Parsing " << filename << " brick file... \n";
+
+	GLOBAL_totmass = 0;
 
     std::fstream fin(filename);
 	if (!fin.good())
@@ -161,12 +173,14 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 my_vertexes.back().push_back(my_point);
                 token_stride += 3;
 
+				if (token_stride == ntokens)
+					break;
+
                 if (tokenasterisk[token_stride] == true) {
                     token_stride +=1; // skip asterisk separator, if any
                     my_vertexes.push_back(std::vector< ChVector<> >()); // begin other list of convex hulls
                 }
-                if (token_stride == ntokens)
-                    break;
+                
             }
 
             // Create a polygonal body:
@@ -181,7 +195,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
                 auto vshape = std::make_shared<ChTriangleMeshShape>();
                 collision::ChConvexHullLibraryWrapper lh;
-                lh.ComputeHull(my_vertexes[ih], vshape->GetMesh());
+                lh.ComputeHull(my_vertexes[ih], *vshape->GetMesh());
                 if (my_visible) {
                     my_body->AddAsset(vshape);
                 }
@@ -189,7 +203,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 double i_mass;
                 ChVector<> i_baricenter;
                 ChMatrix33<> i_inertia;
-                vshape->GetMesh().ComputeMassProperties(true, i_mass, i_baricenter, i_inertia);
+                vshape->GetMesh()->ComputeMassProperties(true, i_mass, i_baricenter, i_inertia);
 
                 composite_inertia.AddComponent(ChFrame<>(i_baricenter), i_mass, i_inertia);
 
@@ -198,9 +212,9 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                     // avoid passing to collision the inner points discarded by convex hull
                     // processor, so use mesh vertexes instead of all argument points
                     std::vector<ChVector<> > points_reduced;
-                    points_reduced.resize(vshape->GetMesh().getCoordsVertices().size());
-                    for (unsigned int i = 0; i < vshape->GetMesh().getCoordsVertices().size(); ++i)
-                        points_reduced[i] = vshape->GetMesh().getCoordsVertices()[i];
+                    points_reduced.resize(vshape->GetMesh()->getCoordsVertices().size());
+                    for (unsigned int i = 0; i < vshape->GetMesh()->getCoordsVertices().size(); ++i)
+                        points_reduced[i] = vshape->GetMesh()->getCoordsVertices()[i];
 
                     my_body->GetCollisionModel()->AddConvexHull(points_reduced);  
                 }
@@ -214,12 +228,18 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             my_body->SetMass(composite_inertia.GetMass() * GLOBAL_density);
             my_body->SetInertiaXX(ChVector<>(principal_I[0] * GLOBAL_density, principal_I[1] * GLOBAL_density, principal_I[2] * GLOBAL_density));
 
+			if (!my_fixed) {
+				GLOBAL_totmass += my_body->GetMass();
+			}
+			//GetLog() << " block mass=" << my_body->GetMass() << "   volume=" << composite_inertia.GetMass() << "\n";
+
             // Set the COG coordinates to barycenter, without displacing the REF reference
             my_body->SetFrame_COG_to_REF(ChFrame<>(composite_inertia.GetCOM(), principal_inertia_csys));
 
 
             my_body->GetCollisionModel()->BuildModel();
-            my_body->SetCollide(true);
+			if (do_collide)
+				my_body->SetCollide(true);
 
             my_body->SetIdentifier(my_ID);
             my_body->Set_Scr_force(my_force);
@@ -265,11 +285,11 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 	} // end while
 
     GetLog() << " ...ok, parsed " << filename << " brick file successfully, created " << added_bricks << " bricks.\n";
+	GetLog() << " TOTAL MASS OF NOT FIXED BRICKS: " << GLOBAL_totmass << "\n\n";
 }
 
 
-// Load brick pattern from disk
-// Create a bunch of ChronoENGINE rigid bodies 
+// Load springs from disk
 
 void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
 
@@ -298,7 +318,7 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 			continue; 
 		}
 
-		// a normal line should contain brick data:
+		// a normal line should contain spring data:
 		if (true)
 		{
 			double tokenvals[500];
@@ -365,6 +385,135 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 }
 
 
+// Load precomputed contact positions from disk
+class PrecomputedContact {
+public:
+	PrecomputedContact(const std::shared_ptr<ChBody> mbodyA, const std::shared_ptr<ChBody> mbodyB, const ChVector<> mpos_t0, const ChVector<> mnormal_t0)
+		: bodyA(mbodyA), bodyB(mbodyB), pos_t0(mpos_t0), normal_t0(mnormal_t0)
+	{
+		rel_pos_A = bodyA->TransformPointParentToLocal(pos_t0);
+		rel_pos_B = bodyB->TransformPointParentToLocal(pos_t0);
+		rel_normal_A = bodyA->TransformDirectionParentToLocal(normal_t0);
+		reaction_cache[0] = 0;
+		reaction_cache[1] = 0;
+		reaction_cache[2] = 0;
+	}
+
+	// For time different than t0, absolute position of contact points might change from the mpos_t0 initial
+	// value, ex. they can detach or compenetrate a bit, so this can be used to retrieve the two points given
+	// the current position of the two blocks.
+	void GetAbsolutePoints(ChVector<>& abs_pos_A, ChVector<>& abs_pos_B, ChVector<>& abs_norm_A) {
+		abs_pos_A = bodyA->TransformPointLocalToParent(rel_pos_A);
+		abs_pos_B = bodyB->TransformPointLocalToParent(rel_pos_B);
+		abs_norm_A = bodyA->TransformDirectionLocalToParent(rel_normal_A);
+	}
+
+	collision::ChCollisionInfo GetCollisionInfo() {
+		collision::ChCollisionInfo minfo;
+		minfo.modelA = bodyA->GetCollisionModel().get();
+		minfo.modelB = bodyB->GetCollisionModel().get();
+		minfo.vpA = bodyA->TransformPointLocalToParent(rel_pos_A);
+		minfo.vpB = bodyB->TransformPointLocalToParent(rel_pos_B);
+		minfo.vN  = bodyA->TransformDirectionLocalToParent(rel_normal_A);
+		minfo.distance = Vdot(minfo.vpB - minfo.vpA, minfo.vN);
+		minfo.reaction_cache = this->reaction_cache;
+		return minfo;
+	}
+
+//private:
+	float reaction_cache[3];
+	ChVector<> pos_t0;
+	ChVector<> normal_t0;
+	std::shared_ptr<ChBody> bodyA;
+	std::shared_ptr<ChBody> bodyB;
+	ChVector<> rel_pos_A;
+	ChVector<> rel_pos_B;
+	ChVector<> rel_normal_A;
+};
+
+void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map, std::vector<PrecomputedContact>& mprecomputed_contacts) {
+
+	GetLog() << "Parsing " << filename << " file of precomputed contacts... \n";
+
+	std::fstream fin(filename);
+	if (!fin.good())
+		throw ChException("ERROR opening .dat file with precomputed contacts: " + filename + "\n");
+
+	int added_contacts = 0;
+
+	std::string line;
+
+	// Parse the file line-by-line
+	while (std::getline(fin, line))
+	{
+		//trims white space from the beginning of the string
+		line.erase(line.begin(), find_if(line.begin(), line.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+
+		// skip empty lines
+		if (line[0] == 0)
+			continue;
+
+		// skip comments
+		if (line[0] == '#') {
+			continue;
+		}
+
+		// a normal line should contain contact data:
+		if (true)
+		{
+			double tokenvals[300];
+			int ntokens = 0;
+
+			std::string token;
+			std::istringstream ss(line);
+
+			// parse line in format:
+			// IDbodyA, x,y,z, IDbodyB, x,y,z,  k, L0
+			while (std::getline(ss, token, ',') && ntokens < 300)
+			{
+				std::istringstream stoken(token);
+				stoken >> tokenvals[ntokens];
+				++ntokens;
+			}
+			++added_contacts;
+
+			if (ntokens != 8)
+				throw ChException("ERROR in .dat file of contacts, format is: IDbodyA, IDbodyB, x,y,z, Nx,Ny,Nz but here is:\n" + line + "\n");
+
+			int my_IDbodyA = (int)tokenvals[0];
+			if (my_body_map.find(my_IDbodyA) == my_body_map.end())
+				throw ChException("ERROR in .dat file of contacts, body with identifier bodyA=" + std::to_string(my_IDbodyA) + " not found :\n" + line + "\n");
+
+			int my_IDbodyB = (int)tokenvals[1];
+			if (my_body_map.find(my_IDbodyB) == my_body_map.end())
+				throw ChException("ERROR in .dat file of contacts, body with identifier bodyB=" + std::to_string(my_IDbodyB) + " not found :\n" + line + "\n");
+
+			ChVector<> my_abspos;
+			my_abspos.x() = tokenvals[2];
+			my_abspos.y() = tokenvals[3];
+			my_abspos.z() = tokenvals[4];
+			if (GLOBAL_swap_zy) std::swap(my_abspos.y(), my_abspos.z());
+
+			ChVector<> my_absnorm;
+			my_absnorm.x() = tokenvals[5];
+			my_absnorm.y() = tokenvals[6];
+			my_absnorm.z() = tokenvals[7];
+			if (GLOBAL_swap_zy) std::swap(my_absnorm.y(), my_absnorm.z());
+
+			// store the contact info 
+			std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
+			std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
+
+			PrecomputedContact mcontact(mbodyA, mbodyB, my_abspos, my_absnorm.GetNormalized() );
+			mprecomputed_contacts.push_back(mcontact);
+		}
+
+	} // end while
+
+	GetLog() << " ...ok, parsed " << filename << " contacts file successfully, created " << added_contacts << " contacts.\n";
+}
+
+
 
 // Load seismic displacement function
 // from ascii file, each row is a value followed by CR. Time step is assumed constant.
@@ -411,14 +560,17 @@ class _contact_reporter_class : public  ChContactContainer::ReportContactCallbac
     public:
     ChStreamOutAsciiFile* mfile; // the file to save data into
 
-	virtual bool OnReportContact(const ChVector<>& pA,
-		const ChVector<>& pB,
-		const ChMatrix33<>& plane_coord,
-		const double& distance,
-		const ChVector<>& react_forces,
-		const ChVector<>& react_torques,
-		ChContactable* contactobjA,
-		ChContactable* contactobjB) override {
+	virtual bool OnReportContact(
+		const ChVector<>& pA,             ///< contact pA
+		const ChVector<>& pB,             ///< contact pB
+		const ChMatrix33<>& plane_coord,  ///< contact plane coordsystem (A column 'X' is contact normal)
+		const double& distance,           ///< contact distance
+		const double& eff_radius,         ///< effective radius of curvature at contact
+		const ChVector<>& react_forces,   ///< react.forces (if already computed). In coordsystem 'plane_coord'
+		const ChVector<>& react_torques,  ///< react.torques, if rolling friction (if already computed).
+		ChContactable* contactobjA,  ///< model A (note: some containers may not support it and could be nullptr)
+		ChContactable* contactobjB   ///< model B (note: some containers may not support it and could be nullptr)
+	) override {
 
         // For each contact, this function is executed. 
         // In this example, saves on ascii file:
@@ -468,6 +620,8 @@ int main(int argc, char* argv[]) {
     std::string file_motion_y = "";
     std::string file_motion_z = "";
     std::string file_springs  = "";
+	std::string file_contacts = "";
+	bool use_SOR_solver = false;
 
     if (argc >=2)
         filename = argv[1];
@@ -489,6 +643,10 @@ int main(int argc, char* argv[]) {
             got_command = true;
             file_motion_z = argument;
         }
+		if (command == "precomputed_contacts") {
+			got_command = true;
+			file_contacts = argument;
+		}
         if (command == "motion_dt")  {
             got_command = true;
             GLOBAL_motion_timestep = atof(argument.c_str());
@@ -529,14 +687,42 @@ int main(int argc, char* argv[]) {
             got_command = true;
             GLOBAL_friction = atof(argument.c_str());
         }
+		if (command == "rolling_friction") {
+			got_command = true;
+			GLOBAL_rolling_friction = atof(argument.c_str());
+		}
+		if (command == "spinning_friction") {
+			got_command = true;
+			GLOBAL_spinning_friction = atof(argument.c_str());
+		}
+		if (command == "damping") {
+			got_command = true;
+			GLOBAL_damping = atof(argument.c_str());
+		}
         if (command == "compliance")  {
             got_command = true;
             GLOBAL_compliance = atof(argument.c_str());
         }
+		if (command == "rolling_compliance") {
+			got_command = true;
+			GLOBAL_rolling_compliance = atof(argument.c_str());
+		}
+		if (command == "spinning_compliance") {
+			got_command = true;
+			GLOBAL_spinning_compliance = atof(argument.c_str());
+		}
         if (command == "penetrationrecovery")  {
             got_command = true;
             GLOBAL_penetrationrecovery = atof(argument.c_str());
         }
+		if (command == "warmstart") {
+			got_command = true;
+			GLOBAL_warmstart = atoi(argument.c_str());
+		}
+		if (command == "SOR_solver") {
+			got_command = true;
+			use_SOR_solver = (bool)atoi(argument.c_str());
+		}
         if (!got_command) {
             GetLog() << "ERROR. Unknown command in input line: " << command << "\n";
             return 0;
@@ -562,7 +748,11 @@ int main(int argc, char* argv[]) {
     //mmaterial->SetRestitution(0.0f); // either restitution, or compliance&damping, or none, but not both
     mmaterial->SetCompliance(GLOBAL_compliance);
     mmaterial->SetComplianceT(GLOBAL_compliance);
-    mmaterial->SetDampingF(0.2f);
+    mmaterial->SetDampingF(GLOBAL_damping);
+	mmaterial->SetRollingFriction(GLOBAL_rolling_friction);
+	mmaterial->SetSpinningFriction(GLOBAL_spinning_friction);
+	mmaterial->SetComplianceRolling(GLOBAL_rolling_compliance);
+	mmaterial->SetComplianceSpinning(GLOBAL_spinning_compliance);
 
     // Create the motion functions, if any
     if (file_motion_x != "") {
@@ -582,12 +772,14 @@ int main(int argc, char* argv[]) {
 
     // Create all the rigid bodies loading their shapes from disk
     try {
-        load_brick_file (mphysicalSystem, filename, mmaterial, my_body_map);
+        load_brick_file (mphysicalSystem, filename, mmaterial, my_body_map, (file_contacts == ""));
     }
     catch (ChException my_load_error) {
         GetLog()<< my_load_error.what();
         system("pause");
     }
+
+	
 
     // Create all the springs loading from disk
     if (file_springs != "")
@@ -598,6 +790,21 @@ int main(int argc, char* argv[]) {
             GetLog()<< my_load_error.what();
             system("pause");
         }
+
+	// Create all the precomputed contacts from disk
+	std::vector<PrecomputedContact> precomputed_contacts;
+	std::shared_ptr<ChContactContainerNSC> precomputed_contact_container;
+
+	if (file_contacts != "")
+			try {
+			load_contacts_file(mphysicalSystem, file_contacts, my_body_map, precomputed_contacts);
+			precomputed_contact_container = std::make_shared<ChContactContainerNSC>();
+			mphysicalSystem.Add(precomputed_contact_container);
+		}
+		catch (ChException my_load_error) {
+			GetLog() << my_load_error.what();
+			system("pause");
+		}
 
 
     // Create the Irrlicht visualization (open the Irrlicht device,
@@ -610,8 +817,11 @@ int main(int argc, char* argv[]) {
     ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
                                     core::vector3df(30.f, 80.f, 160.f), 290, 190);
     ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(0, 1.6, 10), core::vector3df(0, 1.6, -3));
-
-    // Use this function for adding a ChIrrNodeAsset to all items
+	
+	application.SetSymbolscale(5e-5);
+	application.SetContactsDrawMode(ChIrrTools::CONTACT_FORCES);
+	
+	// Use this function for adding a ChIrrNodeAsset to all items
     // If you need a finer control on which item really needs a visualization proxy in
     // Irrlicht, just use application.AssetBind(myitem); on a per-item basis.
     application.AssetBindAll();
@@ -627,12 +837,14 @@ int main(int argc, char* argv[]) {
 
     // Prepare the physical system for the simulation
 
-    //mphysicalSystem.SetSolverType(ChSolver::Type::SOLVER_SOR);  // less precise, faster
-    mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
+	if (use_SOR_solver)
+		mphysicalSystem.SetSolverType(ChSolver::Type::SYMMSOR);  // less precise, faster
+	else
+		mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
 
     mphysicalSystem.SetMaxPenetrationRecoverySpeed(GLOBAL_penetrationrecovery); 
     mphysicalSystem.SetMaxItersSolverSpeed(GLOBAL_iterations);
-    mphysicalSystem.SetSolverWarmStarting(true);
+    mphysicalSystem.SetSolverWarmStarting(GLOBAL_warmstart);
 
     //
     // THE SOFT-REAL-TIME CYCLE
@@ -656,6 +868,28 @@ int main(int argc, char* argv[]) {
                              ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),
                              video::SColor(50, 90, 90, 150), true);
 
+		// Populate precomputed contacts  if a file of contacts at t=0 is provided.
+		if (precomputed_contact_container) {
+			precomputed_contact_container->BeginAddContact();
+			for (int i = 0; i < precomputed_contacts.size(); ++i) {
+				precomputed_contact_container->AddContact( precomputed_contacts[i].GetCollisionInfo() );
+			}
+			precomputed_contact_container->EndAddContact();
+		}
+		ChIrrTools::drawAllContactPoints(precomputed_contact_container, application.GetVideoDriver(), 0.2, ChIrrTools::CONTACT_NORMALS);
+		/*
+		application.GetVideoDriver()->setTransform(irr::video::ETS_WORLD, irr::core::matrix4());
+		irr::video::SMaterial mattransp;
+		mattransp.ZBuffer = false;
+		mattransp.Lighting = false;
+		application.GetVideoDriver()->setMaterial(mattransp);
+		for (auto precompocont : precomputed_contacts) {
+			irr::video::SColor mcol(200, 250, 250, 0);  // yellow vectors
+			ChVector<> v1abs = precompocont.pos_t0;
+			ChVector<> v2abs = precompocont.pos_t0 + precompocont.normal_t0;
+			application.GetVideoDriver()->draw3DLine(irr::core::vector3dfCH(v1abs), irr::core::vector3dfCH(v2abs), mcol);
+		}
+		*/
         application.DoStep();
 
 
@@ -669,13 +903,15 @@ int main(int argc, char* argv[]) {
             ChStreamOutAsciiFile result_contacts(contactfilename);
             my_contact_rep.mfile = &result_contacts;
             mphysicalSystem.GetContactContainer()->ReportAllContacts(&my_contact_rep);
+			if (precomputed_contact_container)
+				precomputed_contact_container->ReportAllContacts(&my_contact_rep);
 
             // b) Save rigid body positions and rotations
             char bodyfilename[200];
             sprintf(bodyfilename, "%s%05d%s", "bodies", mphysicalSystem.GetStepcount(), ".txt");  // ex: bodies00020.tx
             ChStreamOutAsciiFile result_bodies(bodyfilename);
-            ChSystem::IteratorBodies mbodies = mphysicalSystem.IterBeginBodies();
-            while (mbodies != mphysicalSystem.IterEndBodies()) {
+			auto mbodies = mphysicalSystem.Get_bodylist().begin(); 
+            while (mbodies != mphysicalSystem.Get_bodylist().end()) {
                 result_bodies   << (*mbodies)->GetIdentifier()  << ", " 
                                 << (*mbodies)->GetPos().x()  << ", "
                                 << (*mbodies)->GetPos().y()  << ", "
@@ -692,8 +928,8 @@ int main(int argc, char* argv[]) {
             char springfilename[200];
             sprintf(springfilename, "%s%05d%s", "springs", mphysicalSystem.GetStepcount(), ".txt");  // ex: springs00020.tx
             ChStreamOutAsciiFile result_springs(springfilename);
-            ChSystem::IteratorLinks mlink = mphysicalSystem.IterBeginLinks();
-            while (mlink != mphysicalSystem.IterEndLinks()) {
+            auto mlink = mphysicalSystem.Get_linklist().begin();
+            while (mlink != mphysicalSystem.Get_linklist().end()) {
                 if (auto mspring = std::dynamic_pointer_cast<ChLinkSpring>((*mlink)))
                 result_springs  << mspring->GetIdentifier()  << ", " 
                                 << mspring->Get_SpringReact()  << ", "
