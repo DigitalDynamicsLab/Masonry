@@ -730,6 +730,9 @@ int main(int argc, char* argv[]) {
         iarg +=2;
     }
 
+    // Create a directory for file outputs
+    filesystem::create_directory("output");
+
     // Create a ChronoENGINE physical system
     ChSystemNSC mphysicalSystem;
 
@@ -903,8 +906,9 @@ int main(int argc, char* argv[]) {
         {
             // a) Use the contact callback object to save contacts:
             char contactfilename[200];
-            sprintf(contactfilename, "%s%05d%s", "contacts", mphysicalSystem.GetStepcount(), ".txt");  // ex: contacts00020.tx
-            _contact_reporter_class my_contact_rep;
+            sprintf(contactfilename, "output/%s%05d%s", "contacts", mphysicalSystem.GetStepcount(), ".txt");  // ex: contacts00020.tx
+            std::shared_ptr<_contact_reporter_class> my_contact_rep(new _contact_reporter_class);
+
             ChStreamOutAsciiFile result_contacts(contactfilename);
             my_contact_rep.mfile = &result_contacts;
             mphysicalSystem.GetContactContainer()->ReportAllContacts(&my_contact_rep);
@@ -913,7 +917,7 @@ int main(int argc, char* argv[]) {
 
             // b) Save rigid body positions and rotations
             char bodyfilename[200];
-            sprintf(bodyfilename, "%s%05d%s", "bodies", mphysicalSystem.GetStepcount(), ".txt");  // ex: bodies00020.tx
+            sprintf(bodyfilename, "output/%s%05d%s", "bodies", mphysicalSystem.GetStepcount(), ".txt");  // ex: bodies00020.tx
             ChStreamOutAsciiFile result_bodies(bodyfilename);
 			auto mbodies = mphysicalSystem.Get_bodylist().begin(); 
             while (mbodies != mphysicalSystem.Get_bodylist().end()) {
@@ -931,7 +935,7 @@ int main(int argc, char* argv[]) {
 
             // b) Save spring reactions
             char springfilename[200];
-            sprintf(springfilename, "%s%05d%s", "springs", mphysicalSystem.GetStepcount(), ".txt");  // ex: springs00020.tx
+            sprintf(springfilename, "output/%s%05d%s", "springs", mphysicalSystem.GetStepcount(), ".txt");  // ex: springs00020.tx
             ChStreamOutAsciiFile result_springs(springfilename);
             auto mlink = mphysicalSystem.Get_linklist().begin();
             while (mlink != mphysicalSystem.Get_linklist().end()) {
