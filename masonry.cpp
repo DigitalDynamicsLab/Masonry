@@ -852,7 +852,9 @@ int main(int argc, char* argv[]) {
 
 
     application.SetTimestep(GLOBAL_timestep);
-    //application.SetPaused(true);
+    
+    application.SetPaused(true);
+    GetLog() << "PAUSED: press SPACEBAR to start simulation... \n";
 
     if (GLOBAL_snapshot_each >0) {
         application.SetVideoframeSave(true);
