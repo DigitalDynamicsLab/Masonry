@@ -59,7 +59,7 @@ project(masonry)
 #--------------------------------------------------------------
 
 find_package(Chrono
-             COMPONENTS Irrlicht Fea
+             COMPONENTS Irrlicht 
              CONFIG)
 
 #--------------------------------------------------------------
