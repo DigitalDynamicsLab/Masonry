@@ -8,9 +8,13 @@
 #include "chrono/physics/ChSystemNSC.h"
 #include "chrono/physics/ChContactContainerNSC.h"
 #include "chrono/physics/ChBodyEasy.h"
+#include "chrono/physics/ChLinkTSDA.h"
+#include "chrono/physics/ChLinkSpring.h"
 #include "chrono/assets/ChTexture.h"
 #include "chrono/assets/ChPointPointDrawing.h"
-#include "chrono/collision/ChCCollisionSystemBullet.h"
+#include "chrono/collision/ChCollisionSystemBullet.h"
+#include "chrono/collision/ChCollisionUtils.h"
+#include "chrono/solver/ChSolverBB.h"
 #include "chrono_irrlicht/ChIrrApp.h"
 #include "chrono/utils/ChCompositeInertia.h"
 #include <iostream>
@@ -21,7 +25,7 @@
 #include <functional> 
 #include <cctype>
 #include <unordered_map>
-
+#include "chrono_thirdparty/filesystem/path.h"
 
 // Use the namespace of Chrono
 
@@ -157,6 +161,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             token_stride += 3;
             
             std::vector< std::vector< ChVector<> > > my_vertexes;
+
             my_vertexes.push_back(std::vector< ChVector<> >());
             while (true) {
                 if (token_stride+2 >= ntokens) {
@@ -184,7 +189,8 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             }
 
             // Create a polygonal body:
-            //std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes[0],1800,true, my_visible));
+            // std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes[0],1800, false, true, mmaterial)); then move REF to my_reference, or..
+
             std::shared_ptr<ChBodyAuxRef> my_body (new ChBodyAuxRef);
 
             my_body->GetCollisionModel()->ClearModel();
@@ -193,11 +199,11 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
             for (int ih = 0 ; ih < my_vertexes.size() ; ++ih) {
 
-                auto vshape = std::make_shared<ChTriangleMeshShape>();
+                auto vshape = chrono_types::make_shared<ChTriangleMeshShape>();
                 collision::ChConvexHullLibraryWrapper lh;
                 lh.ComputeHull(my_vertexes[ih], *vshape->GetMesh());
                 if (my_visible) {
-                    my_body->AddAsset(vshape);
+                     my_body->AddAsset(vshape);
                 }
 
                 double i_mass;
@@ -213,16 +219,20 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                     // processor, so use mesh vertexes instead of all argument points
                     std::vector<ChVector<> > points_reduced;
                     points_reduced.resize(vshape->GetMesh()->getCoordsVertices().size());
-                    for (unsigned int i = 0; i < vshape->GetMesh()->getCoordsVertices().size(); ++i)
-                        points_reduced[i] = vshape->GetMesh()->getCoordsVertices()[i];
 
-                    my_body->GetCollisionModel()->AddConvexHull(points_reduced);  
+                    for (unsigned int i = 0; i < vshape->GetMesh()->getCoordsVertices().size(); ++i) {
+                        points_reduced[i] = vshape->GetMesh()->getCoordsVertices()[i];
+                    }
+
+                    my_body->GetCollisionModel()->AddConvexHull(mmaterial,points_reduced);  
                 }
             }
 
             ChMatrix33<> principal_inertia_csys;
-            double principal_I[3];
-            composite_inertia.GetInertia().FastEigen(principal_inertia_csys, principal_I);
+            Eigen::Vector3d principal_I;
+            composite_inertia.GetInertia().SelfAdjointEigenSolve(principal_inertia_csys, principal_I);
+            if (principal_inertia_csys.determinant() < 0)
+            principal_inertia_csys.col(0) *= -1;
 
             my_body->SetDensity((float)GLOBAL_density);
             my_body->SetMass(composite_inertia.GetMass() * GLOBAL_density);
@@ -242,8 +252,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 				my_body->SetCollide(true);
 
             my_body->SetIdentifier(my_ID);
-            my_body->Set_Scr_force(my_force);
-            my_body->SetMaterialSurface(mmaterial);
+            my_body->Accumulate_force(my_force,VNULL,true); // add force to COG of body.
             my_body->SetFrame_REF_to_abs(ChFrame<>(my_reference));
 
             // Set the color of body by randomizing a gray shade
@@ -364,7 +373,7 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
             double my_L0 =  tokenvals[10];
             
             // Create a spring:
-            std::shared_ptr<ChLinkSpring> my_spring (new ChLinkSpring());
+            std::shared_ptr<chrono::ChLinkSpring> my_spring (new ChLinkSpring());
             my_spring->SetIdentifier(my_ID);
             std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
             std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
@@ -609,9 +618,9 @@ class _contact_reporter_class : public  ChContactContainer::ReportContactCallbac
 
 int main(int argc, char* argv[]) {
 
-    GLOBAL_motion_X = std::make_shared<ChFunction_Recorder>();
-    GLOBAL_motion_Y = std::make_shared<ChFunction_Recorder>();
-    GLOBAL_motion_Z = std::make_shared<ChFunction_Recorder>();
+    GLOBAL_motion_X = chrono_types::make_shared<ChFunction_Recorder>();
+    GLOBAL_motion_Y = chrono_types::make_shared<ChFunction_Recorder>();
+    GLOBAL_motion_Z = chrono_types::make_shared<ChFunction_Recorder>();
 
     // Parse input command
 
@@ -801,7 +810,7 @@ int main(int argc, char* argv[]) {
 	if (file_contacts != "")
 			try {
 			load_contacts_file(mphysicalSystem, file_contacts, my_body_map, precomputed_contacts);
-			precomputed_contact_container = std::make_shared<ChContactContainerNSC>();
+			precomputed_contact_container = chrono_types::make_shared<ChContactContainerNSC>();
 			mphysicalSystem.Add(precomputed_contact_container);
 		}
 		catch (ChException my_load_error) {
@@ -836,18 +845,22 @@ int main(int argc, char* argv[]) {
 
     // Set no gravity on Y:
     application.GetSystem()->Set_G_acc(ChVector<>(0,-9.8,0));
-    //application.GetSystem()->Set_G_acc(ChVector<>(9.8*0.2,-9.8,0));
+
 
     // Prepare the physical system for the simulation
 
 	if (use_SOR_solver)
-		mphysicalSystem.SetSolverType(ChSolver::Type::SYMMSOR);  // less precise, faster
-	else
-		mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
+		mphysicalSystem.SetSolverType(ChSolver::Type::PSSOR);  // less precise, faster
+    else {
+        mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
+        auto msolv = mphysicalSystem.GetSolver();
+        if (auto mbbsol = std::dynamic_pointer_cast<chrono::ChSolverBB>(msolv)) {
+            mbbsol->EnableWarmStart(GLOBAL_warmstart);
+        }
+    }
 
     mphysicalSystem.SetMaxPenetrationRecoverySpeed(GLOBAL_penetrationrecovery); 
-    mphysicalSystem.SetMaxItersSolverSpeed(GLOBAL_iterations);
-    mphysicalSystem.SetSolverWarmStarting(GLOBAL_warmstart);
+    mphysicalSystem.SetSolverMaxIterations(GLOBAL_iterations);
 
     //
     // THE SOFT-REAL-TIME CYCLE
@@ -898,8 +911,8 @@ int main(int argc, char* argv[]) {
 			application.GetVideoDriver()->draw3DLine(irr::core::vector3dfCH(v1abs), irr::core::vector3dfCH(v2abs), mcol);
 		}
 		*/
-        application.DoStep();
 
+        application.DoStep();
 
         // Do some output to disk, for later postprocessing
         if (GLOBAL_save_each && (mphysicalSystem.GetStepcount() % GLOBAL_save_each  == 0))
@@ -909,11 +922,12 @@ int main(int argc, char* argv[]) {
             sprintf(contactfilename, "output/%s%05d%s", "contacts", mphysicalSystem.GetStepcount(), ".txt");  // ex: contacts00020.tx
             std::shared_ptr<_contact_reporter_class> my_contact_rep(new _contact_reporter_class);
 
+            //_contact_reporter_class my_contact_rep;
             ChStreamOutAsciiFile result_contacts(contactfilename);
-            my_contact_rep.mfile = &result_contacts;
-            mphysicalSystem.GetContactContainer()->ReportAllContacts(&my_contact_rep);
+            my_contact_rep->mfile = &result_contacts;
+            mphysicalSystem.GetContactContainer()->ReportAllContacts(my_contact_rep);
 			if (precomputed_contact_container)
-				precomputed_contact_container->ReportAllContacts(&my_contact_rep);
+				precomputed_contact_container->ReportAllContacts(my_contact_rep);
 
             // b) Save rigid body positions and rotations
             char bodyfilename[200];
@@ -958,6 +972,7 @@ int main(int argc, char* argv[]) {
             application.GetDevice()->closeDevice();
 
         application.GetVideoDriver()->endScene();
+
     }
 
     return 0;
