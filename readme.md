@@ -78,9 +78,17 @@ Example of a file with just two-blocks, one fixed, the other falling (two CR-ter
 Note: if you need a brick to be made of multiple convex shapes (ex for a "L" shaped concave brick that can be decomposed in two convex sub-shapes), 
 just use an asterisk in the list of vertexes to separate the vertexes of the n-th sub-shape from the vertexes of the (n+1)-th shape, ex. 
 
-    ... 0,1,2, 3,4,1, *, 3,3,3, 4,2,3, ...
+    ... 0,1,2, 3,4,1,*, 3,3,3, 4,2,3, ...
 
+Note: if you need to override the default friction on a per-brick basis, add a ",f,[value]" at the end of the brick line, without spaces, for example here we override the friction of the second brick with a value of 0.0001: 
 
+    0,1,1, 0,0,0, 0.247655,3.048388,0.4,  0.458039,2.772294,0.0,   0.0,2.8,0.0,  0.0,3.3,0.0,  0.518308,3.3,0.0,  0.518308,3.268648,0.0,  0.458039,2.772294,0.8,  0.518308,3.268648,0.8,  0.0,2.8,0.8,  0.0,3.3,0.8,  0.518308,3.3,0.8
+    1,0,1,0,0,0,0.247655,4.048388,0.4,0.458039,3.772294,0.0,0.0,3.8,0.0,0.0,4.3,0.0,0.518308,4.3,0.0,0.518308,4.268648,0.0,0.458039,3.772294,0.8,0.518308,4.268648,0.8,0.0,3.8,0.8,0.0,4.3,0.8,0.518308,4.3,0.8,f,0.0001
+	
+You can set the friction with the "f" symbor per each sub-shape in concave bricks separated by asterisks, just add the f,[value] before the separating asterisk, ex.
+    ... 0,1,2, 3,4,1,f,0001,*, 3,3,3, 4,2,3, 1,2,1,f,.0002,  
+	
+If two blocks with different frictions are in contact, the minimum of the two values is used in the combined contact.
 
 ## Input file format for springs
   

@@ -113,6 +113,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 		{
 			std::vector<double> tokenvals;
             std::vector<bool>   tokenasterisk;
+            std::vector<bool>   tokenfriction;
 			int ntokens = 0;
 
 			std::string token;
@@ -124,15 +125,21 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 			{
                 tokenvals.push_back(0);
                 tokenasterisk.push_back(false);
+                tokenfriction.push_back(false);
 
 				std::istringstream stoken(token);
-                //GetLog() << "  token n." << ntokens << " is: "<< stoken.str().c_str() << "\n";
+
 				if (token == "*") {
                     tokenasterisk[ntokens] = true; 
                     tokenvals[ntokens] = 0;
-                }
+                } else 
+                    if (token == "f") {
+                        tokenfriction[ntokens] = true; 
+                        tokenvals[ntokens] = 0;
+                    }
                 else {
                     tokenasterisk[ntokens] = false;
+                    tokenfriction[ntokens] = false; 
                     stoken >> tokenvals[ntokens]; 
                 }
 				++ntokens;	
@@ -161,8 +168,11 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             token_stride += 3;
             
             std::vector< std::vector< ChVector<> > > my_vertexes;
+            std::vector< std::shared_ptr<ChMaterialSurface> > my_materials;
 
             my_vertexes.push_back(std::vector< ChVector<> >());
+            my_materials.push_back( mmaterial );
+
             while (true) {
                 if (token_stride+2 >= ntokens) {
                     throw ChException("ERROR in .dat file, format is: ID, fixed, visible, Fx, Fy, Fz, Refx,Refy,Refz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
@@ -184,7 +194,28 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 if (tokenasterisk[token_stride] == true) {
                     token_stride +=1; // skip asterisk separator, if any
                     my_vertexes.push_back(std::vector< ChVector<> >()); // begin other list of convex hulls
+                    my_materials.push_back( mmaterial );
                 }
+
+                if (tokenfriction[token_stride] == true) {
+                    double customfriction = tokenvals[token_stride + 1];
+
+                    std::shared_ptr<ChMaterialSurfaceNSC> custommaterial(new ChMaterialSurfaceNSC);
+                    custommaterial->SetFriction(customfriction); 
+                    //mmaterial->SetRestitution(0.0f); // either restitution, or compliance&damping, or none, but not both
+                    custommaterial->SetCompliance(GLOBAL_compliance);
+                    custommaterial->SetComplianceT(GLOBAL_compliance);
+                    custommaterial->SetDampingF(GLOBAL_damping);
+	                custommaterial->SetRollingFriction(GLOBAL_rolling_friction);
+	                custommaterial->SetSpinningFriction(GLOBAL_spinning_friction);
+	                custommaterial->SetComplianceRolling(GLOBAL_rolling_compliance);
+	                custommaterial->SetComplianceSpinning(GLOBAL_spinning_compliance);
+                    my_materials.back() = custommaterial;
+
+                    token_stride +=2; // skip "f" friction separator and following friction value.
+                }
+                if (token_stride == ntokens)
+					break;
                 
             }
 
@@ -224,7 +255,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                         points_reduced[i] = vshape->GetMesh()->getCoordsVertices()[i];
                     }
 
-                    my_body->GetCollisionModel()->AddConvexHull(mmaterial,points_reduced);  
+                    my_body->GetCollisionModel()->AddConvexHull(my_materials[ih],points_reduced);  
                 }
             }
 
