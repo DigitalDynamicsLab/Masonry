@@ -878,7 +878,10 @@ int main(int argc, char* argv[]) {
 			}
 			precomputed_contact_container->EndAddContact();
 		}
-		ChIrrTools::drawAllContactPoints(precomputed_contact_container, application.GetVideoDriver(), 0.2, ChIrrTools::CONTACT_NORMALS);
+
+        if (precomputed_contact_container)
+		    ChIrrTools::drawAllContactPoints(precomputed_contact_container, application.GetVideoDriver(), 0.2, ChIrrTools::CONTACT_NORMALS);
+
 		/*
 		application.GetVideoDriver()->setTransform(irr::video::ETS_WORLD, irr::core::matrix4());
 		irr::video::SMaterial mattransp;
