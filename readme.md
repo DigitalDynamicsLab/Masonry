@@ -75,6 +75,13 @@ Example of a file with just two-blocks, one fixed, the other falling (two CR-ter
     0,1,1, 0,0,0, 0.247655,3.048388,0.4,  0.458039,2.772294,0.0,   0.0,2.8,0.0,  0.0,3.3,0.0,  0.518308,3.3,0.0,  0.518308,3.268648,0.0,  0.458039,2.772294,0.8,  0.518308,3.268648,0.8,  0.0,2.8,0.8,  0.0,3.3,0.8,  0.518308,3.3,0.8
     1,0,1,0,0,0,0.247655,4.048388,0.4,0.458039,3.772294,0.0,0.0,3.8,0.0,0.0,4.3,0.0,0.518308,4.3,0.0,0.518308,4.268648,0.0,0.458039,3.772294,0.8,0.518308,4.268648,0.8,0.0,3.8,0.8,0.0,4.3,0.8,0.518308,4.3,0.8
 
+Note: if you need a brick to be made of multiple convex shapes (ex for a "L" shaped concave brick that can be decomposed in two convex sub-shapes), 
+just use an asterisk in the list of vertexes to separate the vertexes of the n-th sub-shape from the vertexes of the (n+1)-th shape, ex. 
+
+    ... 0,1,2, 3,4,1, *, 3,3,3, 4,2,3, ...
+
+
+
 ## Input file format for springs
   
 The (optional) file for the springs is an ASCII file, with a row per each spring, each row being a sequence of comma separated values like this:
