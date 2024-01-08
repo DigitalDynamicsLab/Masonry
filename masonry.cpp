@@ -9,13 +9,13 @@
 #include "chrono/physics/ChContactContainerNSC.h"
 #include "chrono/physics/ChBodyEasy.h"
 #include "chrono/physics/ChLinkTSDA.h"
-#include "chrono/physics/ChLinkSpring.h"
 #include "chrono/assets/ChTexture.h"
-#include "chrono/assets/ChPointPointDrawing.h"
-#include "chrono/collision/ChCollisionSystemBullet.h"
-#include "chrono/collision/ChCollisionUtils.h"
+#include "chrono/assets/ChVisualShapePointPoint.h"
+#include "chrono/collision/bullet/ChCollisionSystemBullet.h"
+#include "chrono/collision/ChCollisionShapeConvexHull.h"
+#include "chrono/collision/bullet/ChCollisionUtilsBullet.h"
 #include "chrono/solver/ChSolverBB.h"
-#include "chrono_irrlicht/ChIrrApp.h"
+#include "chrono_irrlicht/ChVisualSystemIrrlicht.h"
 #include "chrono/utils/ChCompositeInertia.h"
 #include <iostream>
 #include <sstream>
@@ -33,13 +33,14 @@ using namespace chrono;
 using namespace irrlicht;
 
 // Use the main namespaces of Irrlicht
+/*
 using namespace irr;
 using namespace core;
 using namespace scene;
 using namespace video;
 using namespace io;
 using namespace gui;
-
+*/
 
 //using namespace std;
 
@@ -97,7 +98,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 	while(std::getline(fin, line)) 
 	{
 		//trims white space from the beginning of the string
-		line.erase(line.begin(), find_if(line.begin(), line.end(), std::not1(std::ptr_fun<int, int>(std::isspace)))); 
+		line.erase(line.begin(), find_if(line.begin(), line.end(), [](int c) {return !std::isspace(c);} )); 
         
         // skip empty lines
 		if(line[0] == 0) 
@@ -224,18 +225,22 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
             std::shared_ptr<ChBodyAuxRef> my_body (new ChBodyAuxRef);
 
-            my_body->GetCollisionModel()->ClearModel();
+            my_body->GetCollisionModel()->Clear();
 
             utils::CompositeInertia composite_inertia;
 
+            double mgray = 0.6+0.4*ChRandom();
+            ChColor brickcolor(mgray, mgray, mgray);
+
             for (int ih = 0 ; ih < my_vertexes.size() ; ++ih) {
 
-                auto vshape = chrono_types::make_shared<ChTriangleMeshShape>();
-                collision::ChConvexHullLibraryWrapper lh;
+                auto vshape = chrono_types::make_shared<ChVisualShapeTriangleMesh>();
+                bt_utils::ChConvexHullLibraryWrapper lh;
                 lh.ComputeHull(my_vertexes[ih], *vshape->GetMesh());
                 if (my_visible) {
-                     my_body->AddAsset(vshape);
+                     my_body->AddVisualShape(vshape);
                 }
+                vshape->SetColor(brickcolor);
 
                 double i_mass;
                 ChVector<> i_baricenter;
@@ -254,8 +259,8 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                     for (unsigned int i = 0; i < vshape->GetMesh()->getCoordsVertices().size(); ++i) {
                         points_reduced[i] = vshape->GetMesh()->getCoordsVertices()[i];
                     }
-
-                    my_body->GetCollisionModel()->AddConvexHull(my_materials[ih],points_reduced);  
+                    auto cshape = chrono_types::make_shared<ChCollisionShapeConvexHull>(my_materials[ih], points_reduced);
+                    //my_body->GetCollisionModel()->AddShape(my_materials[ih], points_reduced);
                 }
             }
 
@@ -265,7 +270,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             if (principal_inertia_csys.determinant() < 0)
             principal_inertia_csys.col(0) *= -1;
 
-            my_body->SetDensity((float)GLOBAL_density);
+            //my_body->SetDensity((float)GLOBAL_density);
             my_body->SetMass(composite_inertia.GetMass() * GLOBAL_density);
             my_body->SetInertiaXX(ChVector<>(principal_I[0] * GLOBAL_density, principal_I[1] * GLOBAL_density, principal_I[2] * GLOBAL_density));
 
@@ -277,20 +282,12 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             // Set the COG coordinates to barycenter, without displacing the REF reference
             my_body->SetFrame_COG_to_REF(ChFrame<>(composite_inertia.GetCOM(), principal_inertia_csys));
 
-
-            my_body->GetCollisionModel()->BuildModel();
 			if (do_collide)
 				my_body->SetCollide(true);
 
             my_body->SetIdentifier(my_ID);
             my_body->Accumulate_force(my_force,VNULL,true); // add force to COG of body.
             my_body->SetFrame_REF_to_abs(ChFrame<>(my_reference));
-
-            // Set the color of body by randomizing a gray shade
-            std::shared_ptr<ChColorAsset> mcolor (new ChColorAsset);
-            double mgray = 0.6+0.4*ChRandom();
-            mcolor->SetColor(ChColor(mgray, mgray, mgray));
-            my_body->AddAsset(mcolor);
 
             mphysicalSystem.Add(my_body);
 
@@ -347,7 +344,7 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 	while(std::getline(fin, line)) 
 	{
 		//trims white space from the beginning of the string
-		line.erase(line.begin(), find_if(line.begin(), line.end(), std::not1(std::ptr_fun<int, int>(std::isspace)))); 
+		line.erase(line.begin(), find_if(line.begin(), line.end(), [](int c) {return !std::isspace(c);} )); 
         
         // skip empty lines
 		if(line[0] == 0) 
@@ -404,19 +401,19 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
             double my_L0 =  tokenvals[10];
             
             // Create a spring:
-            std::shared_ptr<chrono::ChLinkSpring> my_spring (new ChLinkSpring());
+            std::shared_ptr<chrono::ChLinkTSDA> my_spring (new ChLinkTSDA());
             my_spring->SetIdentifier(my_ID);
             std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
             std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
             GetLog() << "mbodyA ID: " << mbodyA->GetIdentifier() << " for ID " << my_IDbodyA << "  pos: " << mbodyA->GetPos() << "\n";
             GetLog() << "mbodyB ID: " << mbodyB->GetIdentifier() << " for ID " << my_IDbodyB << "  pos: " << mbodyB->GetPos() << "\n";
-            my_spring->Initialize(mbodyA, mbodyB, false, my_referenceA, my_referenceB, false, my_L0);
-            my_spring->Set_SpringK(my_k);
+            my_spring->Initialize(mbodyA, mbodyB, false, my_referenceA, my_referenceB);
+            my_spring->SetSpringCoefficient(my_k);
             mphysicalSystem.Add(my_spring);
 
-            std::shared_ptr<ChPointPointSegment> my_line (new ChPointPointSegment());
+            std::shared_ptr<ChVisualShapeSpring> my_line (new ChVisualShapeSpring());
             my_line->SetColor(ChColor(1,0,0));
-            my_spring->AddAsset(my_line);
+            my_spring->AddVisualShape(my_line);
 		}
 
 	} // end while
@@ -448,8 +445,8 @@ public:
 		abs_norm_A = bodyA->TransformDirectionLocalToParent(rel_normal_A);
 	}
 
-	collision::ChCollisionInfo GetCollisionInfo() {
-		collision::ChCollisionInfo minfo;
+	ChCollisionInfo GetCollisionInfo() {
+		ChCollisionInfo minfo;
 		minfo.modelA = bodyA->GetCollisionModel().get();
 		minfo.modelB = bodyB->GetCollisionModel().get();
 		minfo.vpA = bodyA->TransformPointLocalToParent(rel_pos_A);
@@ -487,7 +484,7 @@ void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 	while (std::getline(fin, line))
 	{
 		//trims white space from the beginning of the string
-		line.erase(line.begin(), find_if(line.begin(), line.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+		line.erase(line.begin(), find_if(line.begin(), line.end(), [](int c) {return !std::isspace(c);} ));
 
 		// skip empty lines
 		if (line[0] == 0)
@@ -777,9 +774,9 @@ int main(int argc, char* argv[]) {
     ChSystemNSC mphysicalSystem;
 
     // Here set the inward-outward margins for collision shapes:
-    collision::ChCollisionModel::SetDefaultSuggestedEnvelope(0.01);
-    collision::ChCollisionModel::SetDefaultSuggestedMargin(0.005);
-    collision::ChCollisionSystemBullet::SetContactBreakingThreshold(0.01);
+    ChCollisionModel::SetDefaultSuggestedEnvelope(0.01);
+    ChCollisionModel::SetDefaultSuggestedMargin(0.005);
+    ChCollisionSystemBullet::SetContactBreakingThreshold(0.01);
 
     //
     // HERE YOU POPULATE THE MECHANICAL SYSTEM OF CHRONO...
@@ -849,33 +846,26 @@ int main(int argc, char* argv[]) {
 			system("pause");
 		}
 
-
-    // Create the Irrlicht visualization (open the Irrlicht device,
-    // bind a simple user interface, etc. etc.)
-    ChIrrApp application(&mphysicalSystem, L"Bricks test", core::dimension2d<u32>(960, 720), false, true);
-
-    // Easy shortcuts to add camera, lights, logo and sky in Irrlicht scene:
-    ChIrrWizard::add_typical_Logo(application.GetDevice());
-    ChIrrWizard::add_typical_Sky(application.GetDevice());
-    ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
-                                    core::vector3df(30.f, 80.f, 160.f), 290, 190);
-    ChIrrWizard::add_typical_Camera(application.GetDevice(), core::vector3df(0, 1.6, 10), core::vector3df(0, 1.6, -3));
-	
-	application.SetSymbolscale(5e-5);
-	application.SetContactsDrawMode(ChIrrTools::CONTACT_FORCES);
-	
-	// Use this function for adding a ChIrrNodeAsset to all items
-    // If you need a finer control on which item really needs a visualization proxy in
-    // Irrlicht, just use application.AssetBind(myitem); on a per-item basis.
-    application.AssetBindAll();
-
-    // Use this function for 'converting' into Irrlicht meshes the assets
-    // into Irrlicht-visualizable meshes
-    application.AssetUpdateAll();
+    // Create the Irrlicht visualization system
+    auto application = chrono_types::make_shared<ChVisualSystemIrrlicht>();
+    application->AttachSystem(&mphysicalSystem);
+    application->SetWindowSize(960, 720);
+    application->SetWindowTitle("Bricks test");
+    application->Initialize();
+    application->AddLogo();
+    application->AddSkyBox();
+    application->AddCamera(ChVector<>(0, 1.6, 10),ChVector<>(0, 1.6, -3));
+    application->AddTypicalLights();
+    //ChIrrWizard::add_typical_Lights(application.GetDevice(), core::vector3df(70.f, 120.f, -90.f),
+      //                              core::vector3df(30.f, 80.f, 160.f), 290, 190);
+    application->AddGrid(2, 2, 10, 10, ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),
+                 ChColor(0.31f, 0.43f, 0.43f));
+    application->SetSymbolScale(5e-5);
+    //application->SetContactsDrawMode(ChIrrTools::CONTACT_FORCES);
 
 
     // Set no gravity on Y:
-    application.GetSystem()->Set_G_acc(ChVector<>(0,-9.8,0));
+    mphysicalSystem.Set_G_acc(ChVector<>(0,-9.8,0));
 
 
     // Prepare the physical system for the simulation
@@ -897,27 +887,28 @@ int main(int argc, char* argv[]) {
     // THE SOFT-REAL-TIME CYCLE
     //
 
-
-    application.SetTimestep(GLOBAL_timestep);
     
-    application.SetPaused(true);
-    GetLog() << "PAUSED: press SPACEBAR to start simulation... \n";
+    //application->SetPaused(true);
+    //GetLog() << "PAUSED: press SPACEBAR to start simulation... \n";
 
-    if (GLOBAL_snapshot_each >0) {
-        application.SetVideoframeSave(true);
-        application.SetVideoframeSaveInterval(GLOBAL_snapshot_each);
-    }
 
-    while (application.GetDevice()->run()) {
-        application.GetVideoDriver()->beginScene(true, true, SColor(255, 140, 161, 192));
+    // Simulation loop
+    int snap_num = 0;
 
-        application.DrawAll();
+    while (application->Run()) {
 
-        ChIrrTools::drawGrid(application.GetVideoDriver(), 2, 2, 10, 10,
-                             ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),
-                             video::SColor(50, 90, 90, 150), true);
+        application->BeginScene();
+        application->Render();
+        application->EndScene();
 
-		// Populate precomputed contacts  if a file of contacts at t=0 is provided.
+        if (GLOBAL_snapshot_each && (mphysicalSystem.GetStepcount() % GLOBAL_snapshot_each == 0)) {
+                ++snap_num;
+                char filename[300];
+                sprintf(filename, "snapshot_%05d.jpg", snap_num);
+                application->WriteImageToFile("snapshot.jpg");
+        }
+
+        // Populate precomputed contacts  if a file of contacts at t=0 is provided.
 		if (precomputed_contact_container) {
 			precomputed_contact_container->BeginAddContact();
 			for (int i = 0; i < precomputed_contacts.size(); ++i) {
@@ -927,23 +918,10 @@ int main(int argc, char* argv[]) {
 		}
 
         if (precomputed_contact_container)
-		    ChIrrTools::drawAllContactPoints(precomputed_contact_container, application.GetVideoDriver(), 0.2, ChIrrTools::CONTACT_NORMALS);
+            tools::drawAllContactPoints(application.get(), 0.2, ContactsDrawMode::CONTACT_NORMALS);
 
-		/*
-		application.GetVideoDriver()->setTransform(irr::video::ETS_WORLD, irr::core::matrix4());
-		irr::video::SMaterial mattransp;
-		mattransp.ZBuffer = false;
-		mattransp.Lighting = false;
-		application.GetVideoDriver()->setMaterial(mattransp);
-		for (auto precompocont : precomputed_contacts) {
-			irr::video::SColor mcol(200, 250, 250, 0);  // yellow vectors
-			ChVector<> v1abs = precompocont.pos_t0;
-			ChVector<> v2abs = precompocont.pos_t0 + precompocont.normal_t0;
-			application.GetVideoDriver()->draw3DLine(irr::core::vector3dfCH(v1abs), irr::core::vector3dfCH(v2abs), mcol);
-		}
-		*/
 
-        application.DoStep();
+        mphysicalSystem.DoStepDynamics(GLOBAL_timestep);
 
         // Do some output to disk, for later postprocessing
         if (GLOBAL_save_each && (mphysicalSystem.GetStepcount() % GLOBAL_save_each  == 0))
@@ -984,25 +962,23 @@ int main(int argc, char* argv[]) {
             ChStreamOutAsciiFile result_springs(springfilename);
             auto mlink = mphysicalSystem.Get_linklist().begin();
             while (mlink != mphysicalSystem.Get_linklist().end()) {
-                if (auto mspring = std::dynamic_pointer_cast<ChLinkSpring>((*mlink)))
+                if (auto mspring = std::dynamic_pointer_cast<ChLinkTSDA>((*mlink)))
                 result_springs  << mspring->GetIdentifier()  << ", " 
-                                << mspring->Get_SpringReact()  << ", "
-                                << mspring->GetMarker1()->GetAbsCoord().pos.x() << ", "
-                                << mspring->GetMarker1()->GetAbsCoord().pos.y() << ", "
-                                << mspring->GetMarker1()->GetAbsCoord().pos.z() << ", "
-                                << mspring->GetMarker2()->GetAbsCoord().pos.x() << ", "
-                                << mspring->GetMarker2()->GetAbsCoord().pos.y() << ", "
-                                << mspring->GetMarker2()->GetAbsCoord().pos.z() << ", "
+                                << mspring->Get_react_force()  << ", "
+                                << mspring->GetPoint1Abs().x() << ", "
+                                << mspring->GetPoint1Abs().y() << ", "
+                                << mspring->GetPoint1Abs().z() << ", "
+                                << mspring->GetPoint2Abs().x() << ", "
+                                << mspring->GetPoint2Abs().y() << ", "
+                                << mspring->GetPoint2Abs().z() << ", "
                                 << "\n";
                 ++mlink;
             }
         }
 
         // Force the simulator to close after N seconds
-        if (application.GetSystem()->GetChTime() > GLOBAL_max_simulation_time)
-            application.GetDevice()->closeDevice();
-
-        application.GetVideoDriver()->endScene();
+        if (mphysicalSystem.GetChTime() > GLOBAL_max_simulation_time)
+            application->Quit();
 
     }
 
