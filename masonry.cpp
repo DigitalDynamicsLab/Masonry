@@ -1129,6 +1129,8 @@ int main(int argc, char* argv[]) {
 	// Create a ChronoENGINE physical system
     ChSystemNSC mphysicalSystem;
 
+    mphysicalSystem.SetCollisionSystemType(ChCollisionSystem::Type::BULLET);
+
     // Here set the inward-outward margins for collision shapes:
     ChCollisionModel::SetDefaultSuggestedEnvelope(0.0005);
     ChCollisionModel::SetDefaultSuggestedMargin(0.0001);
@@ -1180,7 +1182,9 @@ int main(int argc, char* argv[]) {
 
     // Create all the polygonal rigid bodies loading their shapes from disk
     try {
-        load_brick_file (mphysicalSystem, filename, mmaterial, my_body_map, (file_contacts == ""));
+        bool do_collision = file_contacts == "";
+        std::cout << "Collision " << (do_collision ? "ENABLED" : "DISABLED" ) << std::endl;
+        load_brick_file (mphysicalSystem, filename, mmaterial, my_body_map, do_collision);
     }
     catch (ChException my_load_error) {
         GetLog()<< my_load_error.what();
