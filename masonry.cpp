@@ -223,9 +223,11 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             // Create a polygonal body:
             // std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes[0],1800, false, true, mmaterial)); then move REF to my_reference, or..
 
-            std::shared_ptr<ChBodyAuxRef> my_body (new ChBodyAuxRef);
+            auto my_body = chrono_types::make_shared<ChBodyAuxRef>();
 
-            my_body->GetCollisionModel()->Clear();
+            //std::shared_ptr<ChBodyAuxRef> my_body (new ChBodyAuxRef);
+
+            //my_body->GetCollisionModel()->Clear();
 
             utils::CompositeInertia composite_inertia;
 
@@ -646,6 +648,8 @@ class _contact_reporter_class : public  ChContactContainer::ReportContactCallbac
 
 int main(int argc, char* argv[]) {
 
+    SetChronoDataPath(CHRONO_DATA_DIR);
+
     GLOBAL_motion_X = chrono_types::make_shared<ChFunction_Recorder>();
     GLOBAL_motion_Y = chrono_types::make_shared<ChFunction_Recorder>();
     GLOBAL_motion_Z = chrono_types::make_shared<ChFunction_Recorder>();
@@ -772,6 +776,8 @@ int main(int argc, char* argv[]) {
 
     // Create a ChronoENGINE physical system
     ChSystemNSC mphysicalSystem;
+
+    mphysicalSystem.SetCollisionSystemType(ChCollisionSystem::Type::BULLET);
 
     // Here set the inward-outward margins for collision shapes:
     ChCollisionModel::SetDefaultSuggestedEnvelope(0.01);
