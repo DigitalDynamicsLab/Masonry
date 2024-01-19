@@ -90,10 +90,10 @@ set(CMAKE_CXX_STANDARD ${CHRONO_CXX_STANDARD})
 # For OpenGL-based or non-graphics projects, this is optional and the block
 # below can be removed (or else explcitly set CMAKE_MACOSX_BUNDLE to 'OFF').
 #
-# If creating application bundles, the build output will be named 'myexe.app'.
+# If creating application bundles, the build output will be named 'masonry.app'.
 # Use the convenience script 'run_app.sh' available under 'contrib/appbundle-macosx/'
 # to run:
-#     start_demo.sh myexe.app
+#     start_demo.sh masonry.app
 
 if(APPLE)
     set(CMAKE_MACOSX_BUNDLE ON)
@@ -131,7 +131,7 @@ endif()
 # files in your project. 
 #--------------------------------------------------------------
 
-add_executable(myexe masonry.cpp)
+add_executable(masonry masonry.cpp)
 
 #--------------------------------------------------------------
 # Set properties for your executable target
@@ -142,15 +142,15 @@ add_executable(myexe masonry.cpp)
 # install tree (if using an installed version of Chrono).
 #--------------------------------------------------------------
 
-target_compile_definitions(myexe PUBLIC "CHRONO_DATA_DIR=\"${CHRONO_DATA_DIR}\"") 
-target_compile_options(myexe PUBLIC ${CHRONO_CXX_FLAGS})
-target_link_options(myexe PUBLIC ${CHRONO_LINKER_FLAGS})
+target_compile_definitions(masonry PUBLIC "CHRONO_DATA_DIR=\"${CHRONO_DATA_DIR}\"") 
+target_compile_options(masonry PUBLIC ${CHRONO_CXX_FLAGS})
+target_link_options(masonry PUBLIC ${CHRONO_LINKER_FLAGS})
 
 #--------------------------------------------------------------
 # Link to Chrono libraries and dependency libraries
 #--------------------------------------------------------------
 
-target_link_libraries(myexe ${CHRONO_LIBRARIES})
+target_link_libraries(masonry ${CHRONO_LIBRARIES})
 
 #--------------------------------------------------------------
 # === 4 (OPTIONAL) ===
@@ -167,3 +167,14 @@ target_link_libraries(myexe ${CHRONO_LIBRARIES})
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "<mycustompathforrelease>")
 add_DLL_copy_command()
+
+
+# Create custom commands, invoked pre-build to copy DLLs to the appropriate
+# directory (depending on the configuration selected at build time in VS)
+add_custom_target(COPY_DATA ALL)
+
+add_custom_command(
+    TARGET COPY_DATA PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/data/" "${CMAKE_BINARY_DIR}/data/"
+)
+
