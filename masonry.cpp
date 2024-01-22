@@ -274,26 +274,33 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             if (my_density > 1500) {
 				if (my_density == 2500) {
 					//create a blue texture for the glass block
-					auto mtexture = chrono_types::make_shared<ChTexture>();
-                    my_body->GetVisualShape(0)->SetTexture(GetChronoDataFile("textures/blu.png"));
+                    for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
+                        my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.549f, 0.929f, 1.0f));
+                    }
 				}
 				else {
 					if (my_density != 2000) {
 						// Set the color of body by randomizing a gray shade (if high density)
                         float mgray = 0.6 + 0.4*ChRandom();
                         my_body->GetVisualShape(0)->SetColor(ChColor(mgray, mgray, mgray));
+                        for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
+                            my_body->GetVisualShape(s_sel)->SetColor(ChColor(mgray, mgray, mgray));
+                        }
 					}
 					else {
 						//create a texture for the specific density
-                        auto mtexture = chrono_types::make_shared<ChTexture>();
-                        my_body->GetVisualShape(0)->SetTexture(GetChronoDataFile("textures/rock.jpg"));
+                        for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
+                            my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.91f, 0.047f, 0.376f));
+                        }
 					}
 				}
 			}
 			else {
 				//create a texture for the low density block
-				auto mtexture = chrono_types::make_shared<ChTexture>();
-                my_body->GetVisualShape(0)->SetTexture(GetChronoDataFile("textures/rock.jpg"));
+                for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
+                    my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.388f, 0.227f, 0.004f));
+                }
+
 			}
 			
             mphysicalSystem.Add(my_body);
