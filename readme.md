@@ -15,14 +15,14 @@ This simulator is command-line operated (command prompt needed for Windowds). Th
 
 Command syntax:
 
-    myexe  [brickfile.txt]
+    masonry  [brickfile.txt]
 
 where 
 - [brickfile.txt]  is your file containing the positions and shapes of the bricks (see the format below)
 
 There are optional parameters that you can enter in the command line (one or more of the above):
 
-    myexe  [brickfile.txt]  spheres [spherefile.txt]  springs [springfile.txt]  motion_X [motionfilex.txt]   motion_Y [motionfiley.txt]    motion_Z [motionfilez.txt]    motion_amplifier [a]  dt [dt]  T_max [t]  save_each [n]  snapshot_each [n] 
+    masonry  [brickfile.txt]  spheres [spherefile.txt]  springs [springfile.txt]  distance [rigidrodfile.txt]  motion_X [motionfilex.txt]   motion_Y [motionfiley.txt]    motion_Z [motionfilez.txt]    motion_amplifier [a]  dt [dt]  T_max [t]  save_each [n]  snapshot_each [n] 
 
 where 
 - **[brickfile.txt]**  is your file containing the positions and shapes of the blocks (see the format below)
@@ -35,17 +35,17 @@ where
 - **motion_amplifier [a]**  tells how much the displacements in the motion files are multiplied. Default is 1, so displacements are kept unaltered, as in the input file.
 - **dt [dt]**  is the timestep for the time integration; the larger the faster the simulation, but less precise. Default: 0.001 seconds.
 - **iterations [n]** tells the max number of iterations for the complementarity solver. Default: 1000.
-- **T_max [t]**  tells when the simulator ends the simulation end exits. Default: 30 seconds.
+- **T_max [t]**  tells when the simulator ends the simulation end exits. Default: 10 seconds.
 - **save_each [n]** tells that the simulator will output on the disk a triplet of result files per each *n* timesteps: ex. *save_each 1*  will save  bodies00001.txt  bodies00002.txt ... contacts00001.txt contacts00002.txt ... springs00001.txt springs00002.txt  etc. Files will go into the working directory. Use 0 to disable saving. Default: save each 50 steps. 
 - **snapshot_each [n]** tells that the simulator will save a snapshot of the 3D visualization each *n* timesteps.Snaphsots will go into the /video_capture directory. Default = 50.
-- **friction [f]** defines the friction coefficients for the blocks. Default 0.4.
-- **compliance [c]** defines the compliance (m/N), inverse of stiffness, of contact points. Default 1e-5f m/N.
+- **friction [f]** defines the friction coefficients for the blocks. Default 0.5 (for spheres is set to 0.3).
+- **compliance [c]** defines the compliance (m/N), inverse of stiffness, of contact points. Default 5e-9f m/N (the same value is for spheres).
 - **damping [r]** defines the Rayleigh damping in contacts. Default 0.07.
 - **rolling_friction [rf]** optional, defines the rolling friction parameter (m), default 0, deactivated. Note: nonzero values causes 2x slower simulation.
 - **spinning_friction [sf]** optional, defines the spinning friction parameter (m), default 0, deactivated. Note: nonzero values causes 2x slower simulation. If spinning_friction >0, it is convenient to have also rolling_friction>0.
 - **rolling_compliance [rc]** optional, use only if rolling_friction >0. Units: rad/Nm. Default 0. 
 - **spinning_compliance [sc]** optional, use only if spinning_friction >0. Units: rad/Nm. Default 0. 
-- **penetrationrecovery [p]** sets the max speed (m/s) of separation when parts are compenetrating because of integration errors or model errors. Default 0.08 m/s. Do not use, or use high values, if non-zero compliance.
+- **penetrationrecovery [p]** sets the max speed (m/s) of separation when parts are compenetrating because of integration errors or model errors. Default 0.005 m/s. Do not use, or use high values, if non-zero compliance.
 - **warmstart** can be 0 (off) or 1 (on). In some cases might speed up the convergence of the solver. Default 0.
 - **SOR_solver** can be 0 (off) or 1 (on) to use the symmetric SOR solver. Default 0, so the default solver is the SPG Barzilai-Borwein, slower than SOR  but more precise.
 

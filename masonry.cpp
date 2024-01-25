@@ -49,8 +49,8 @@ using namespace gui;
 
 // Some global variables
 
-int    GLOBAL_save_each = 100;
-int    GLOBAL_snapshot_each = 100;
+int    GLOBAL_save_each = 50;
+int    GLOBAL_snapshot_each = 50;
 double GLOBAL_max_simulation_time = 10; 
 bool   GLOBAL_load_forces = true; 
 bool   GLOBAL_swap_zy = false;
@@ -72,9 +72,9 @@ bool   GLOBAL_warmstart = false;
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_X; // motion on x direction
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Y; // motion on y (vertical) direction
 std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Z; // motion on z direction
-double GLOBAL_motion_timestep = 0.01; // timestep for sampled earthquake motion 
+//double GLOBAL_motion_timestep = 0.01; // timestep for sampled earthquake motion 
 double GLOBAL_motion_amplifier = 1.0; // scale x,y,z motion by this factor
-double GLOBAL_timestep = 0.0005; // timestep for timestepper integrator
+double GLOBAL_timestep = 0.001; // timestep for timestepper integrator
 bool GLOBAL_use_motions = false;
 int GLOBAL_iterations = 1000;
 double GLOBAL_totmass = 0;
@@ -271,9 +271,9 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             
             my_body->SetFrame_REF_to_abs(ChFrame<>(my_reference));
 
-            if (my_density > 1500) {
+            if (my_density > 1750) {
 				if (my_density == 2500) {
-					//create a blue texture for the glass block
+					//create a blue color for the glass block
                     for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
                         my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.549f, 0.929f, 1.0f));
                     }
@@ -288,7 +288,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                         }
 					}
 					else {
-						//create a texture for the specific density
+						//create a color for the specific density
                         for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
                             my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.91f, 0.047f, 0.376f));
                         }
@@ -296,7 +296,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 				}
 			}
 			else {
-				//create a texture for the low density block
+				//create a color for the low density block
                 for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
                     my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.388f, 0.227f, 0.004f));
                 }
@@ -1045,10 +1045,10 @@ int main(int argc, char* argv[]) {
 			got_command = true;
 			file_contacts = argument;
 		}
-        if (command == "motion_dt")  {
-            got_command = true;
-            GLOBAL_motion_timestep = atof(argument.c_str());
-        }
+        //if (command == "motion_dt")  {
+        //    got_command = true;
+        //    GLOBAL_motion_timestep = atof(argument.c_str());
+        //}
         if (command == "motion_amplifier")  {
             got_command = true;
             GLOBAL_motion_amplifier = atof(argument.c_str());
@@ -1173,15 +1173,15 @@ int main(int argc, char* argv[]) {
 
     // Create the motion functions, if any
     if (file_motion_x != "") {
-        load_motion(GLOBAL_motion_X, file_motion_x.c_str(), 0, GLOBAL_motion_amplifier, GLOBAL_motion_timestep);
+        load_motion(GLOBAL_motion_X, file_motion_x.c_str(), 0, GLOBAL_motion_amplifier); //, GLOBAL_motion_timestep);
         GLOBAL_use_motions = true;
     }
     if (file_motion_y != "") {
-        load_motion(GLOBAL_motion_Y, file_motion_y.c_str(), 0, GLOBAL_motion_amplifier, GLOBAL_motion_timestep);
+        load_motion(GLOBAL_motion_Y, file_motion_y.c_str(), 0, GLOBAL_motion_amplifier); //, GLOBAL_motion_timestep);
         GLOBAL_use_motions = true;
     }
     if (file_motion_z != "") {
-        load_motion(GLOBAL_motion_Z, file_motion_z.c_str(), 0, GLOBAL_motion_amplifier, GLOBAL_motion_timestep);
+        load_motion(GLOBAL_motion_Z, file_motion_z.c_str(), 0, GLOBAL_motion_amplifier); //, GLOBAL_motion_timestep);
         GLOBAL_use_motions = true;
     }
 
@@ -1228,8 +1228,8 @@ int main(int argc, char* argv[]) {
 			system("pause");
 		}
 
-	// Create all the rigid links (distance contraint) loading from disk
-	if (file_distance != "")
+	// Create all the fictious rigid links (only lines for graphical output) loading from disk
+	if (file_line != "")
 		try {
 			load_line_file(mphysicalSystem, file_line, my_body_map);
 		}
@@ -1254,22 +1254,6 @@ int main(int argc, char* argv[]) {
 		}
 
 
-    // // Create the Irrlicht visualization (open the Irrlicht device,
-    // // bind a simple user interface, etc. etc.)
-    // ChIrrApp application(&mphysicalSystem, L"Bricks test", core::dimension2d<u32>(960, 720), false, true);
-
-    // // Easy shortcuts to add camera, lights, logo and sky in Irrlicht scene:
-    // ChIrrWizard::add_typical_Logo(application->GetDevice());
-    // ChIrrWizard::add_typical_Sky(application->GetDevice());
-    // ChIrrWizard::add_typical_Lights(application->GetDevice(), core::vector3df(70.f, 120.f, -90.f), core::vector3df(30.f, 80.f, 160.f), 190, 190);
-    // //ChIrrWizard::add_typical_Camera(application->GetDevice(), core::vector3df(0, 7, 25), core::vector3df(0, 5, -3));
-	// ChIrrWizard::add_typical_Camera(application->GetDevice(), core::vector3df(0, 1.5, 3), core::vector3df(0, 1.5, -3));
-	// // ChIrrWizard::add_typical_Camera(application->GetDevice(), core::vector3df(0, 4, 0), core::vector3df(0, 0, 0));
-	// //ChIrrWizard::add_typical_Lights(application->GetDevice(), core::vector3df(20.f, 110.f, 60.f), core::vector3df(-30.f, 110.f, 40.f), 135, 130); // portico
-	// //ChIrrWizard::add_typical_Camera(application->GetDevice(), core::vector3df(0, 9, 20.3), core::vector3df(0, 9, -90)); // portico
-	// //ChIrrWizard::add_typical_Lights(application->GetDevice(), core::vector3df(20.f, 110.f, 60.f), core::vector3df(-30.f, 110.f, 40.f), 135, 130); // arcata
-	// //ChIrrWizard::add_typical_Camera(application->GetDevice(), core::vector3df(0, 9, 25), core::vector3df(0, 9, -3)); // arcata
-
 // Create the Irrlicht visualization system
     auto application = chrono_types::make_shared<ChVisualSystemIrrlicht>();
     application->AttachSystem(&mphysicalSystem);
@@ -1278,12 +1262,14 @@ int main(int argc, char* argv[]) {
     application->Initialize();
     application->AddLogo();
     application->AddSkyBox();
-    application->AddCamera(ChVector<>(0, 1.6, 10),ChVector<>(0, 1.6, -3));
-    application->AddTypicalLights();
-    //ChIrrWizard::add_typical_Lights(application->GetDevice(), core::vector3df(70.f, 120.f, -90.f),
-      //                              core::vector3df(30.f, 80.f, 160.f), 290, 190);
-    application->AddGrid(2, 2, 10, 10, ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),
-                 ChColor(0.31f, 0.43f, 0.43f));
+    application->AddCamera(ChVector<>(0, 1.6, 6),ChVector<>(0, 1.6, -3));
+	//application->AddTypicalLights();
+	application->AddLight(ChVector<>(70.f, 120.f, -90.f), 190, ChColor(0.7f, 0.7f, 0.7f));
+	application->AddLight(ChVector<>(30.f, 80.f, 160.f), 190, ChColor(0.7f, 0.7f, 0.7f));
+	//application->AddLight(ChVector<>(70.f, 120.f, -90.f), 280, ChColor(0.7f, 0.7f, 0.7f));
+	//application->AddLight(ChVector<>(30.f, 80.f, 160.f), 250, ChColor(0.7f, 0.7f, 0.7f));
+    application->AddGrid(0.5, 0.5, 10, 10, ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),
+                 ChColor(0, 0, 0));
     application->SetSymbolScale(5e-5);
 
 
@@ -1330,7 +1316,7 @@ int main(int argc, char* argv[]) {
                 ++snap_num;
                 char filename[300];
                 sprintf(filename, "snapshot_%05d.jpg", snap_num);
-                application->WriteImageToFile("snapshot.jpg");
+                application->WriteImageToFile(filename);
         }
 
         tools::drawGrid(application.get(), 0.5, 0.5, 20, 20,
