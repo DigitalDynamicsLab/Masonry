@@ -271,37 +271,38 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             
             my_body->SetFrame_REF_to_abs(ChFrame<>(my_reference));
 
-            if (my_density > 1750) {
-				if (my_density == 2500) {
-					//create a blue color for the glass block
+            if (my_body->GetVisualModel()){
+                if (my_density > 1750) {
+				    if (my_density == 2500) {
+					    //create a blue color for the glass block
+                        for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
+                            my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.549f, 0.929f, 1.0f));
+                        }
+				    }
+				    else {
+					    if (my_density != 2000) {
+						    // Set the color of body by randomizing a gray shade (if high density)
+                            float mgray = 0.6 + 0.4*ChRandom();
+                            for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
+                                my_body->GetVisualShape(s_sel)->SetColor(ChColor(mgray, mgray, mgray));
+                            }
+					    }
+					    else {
+						    //create a color for the specific density
+                            for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
+                                my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.91f, 0.047f, 0.376f));
+                            }
+					    }
+				    }
+			    }
+			    else {
+				    //create a color for the low density block
                     for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
-                        my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.549f, 0.929f, 1.0f));
+                        my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.388f, 0.227f, 0.004f));
                     }
-				}
-				else {
-					if (my_density != 2000) {
-						// Set the color of body by randomizing a gray shade (if high density)
-                        float mgray = 0.6 + 0.4*ChRandom();
-                        my_body->GetVisualShape(0)->SetColor(ChColor(mgray, mgray, mgray));
-                        for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
-                            my_body->GetVisualShape(s_sel)->SetColor(ChColor(mgray, mgray, mgray));
-                        }
-					}
-					else {
-						//create a color for the specific density
-                        for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
-                            my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.91f, 0.047f, 0.376f));
-                        }
-					}
-				}
-			}
-			else {
-				//create a color for the low density block
-                for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
-                    my_body->GetVisualShape(s_sel)->SetColor(ChColor(0.388f, 0.227f, 0.004f));
-                }
 
-			}
+			    }
+            }
 			
             mphysicalSystem.Add(my_body);
 
