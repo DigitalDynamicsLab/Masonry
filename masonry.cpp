@@ -456,8 +456,8 @@ void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::sh
 
 			// Create a sphere:
 			auto my_sphere = chrono_types::make_shared<ChBodyEasySphere>(my_radius, my_SPHERE_density, my_visible, true, mmateriall);
-            float colore = 0.9 + 0.7*ChRandom();
-            my_sphere->GetVisualShape(0)->SetColor(ChColor(colore, colore, colore));
+            float colore = 0.10 * ChRandom();
+            my_sphere->GetVisualShape(0)->SetColor(ChColor(0.80+colore, 0.45+colore, 0.32+3*colore));
 			my_sphere->SetPos(my_reference);
 			my_sphere->SetIdentifier(my_ID);
 
