@@ -61,8 +61,10 @@ project(masonry)
 # and, for demonstration purposes, the PardisoMKL module (optional)
 #--------------------------------------------------------------
 
+LIST(APPEND CMAKE_PREFIX_PATH "${CMAKE_INSTALL_PREFIX}/../Chrono/lib")
 find_package(Chrono
-             COMPONENTS Irrlicht 
+             COMPONENTS Irrlicht
+             OPTIONAL_COMPONENTS PardisoMKL Postprocess
              CONFIG)
 
 #--------------------------------------------------------------
