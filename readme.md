@@ -139,12 +139,12 @@ where:
 
 
 ## Input file format for motion law
-The (optional) file for motion law is an ASCII file, with a row per time step, each row being a sequence of two tab separated values like this:
+The (optional) file for motion law is an ASCII file, with a row per time step, each row being a sequence of two comma separated values like this:
 
-    Time1	Value1
-    Time2	Value2
-    Time3	Value3
-    ...         ...
+    Time1  ,  Value1
+    Time2  ,  Value2
+    Time3  ,  Value3
+    ...    ,    ...
 
 where:
 - *Time* is the value sampled in the time flow.

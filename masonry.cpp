@@ -5,7 +5,8 @@
 // from www.chronoengine.info
 //
 
-
+#include "chrono/physics/ChSystemNSC.h"
+#include "chrono/physics/ChContactContainerNSC.h"
 #include "chrono/physics/ChLinkLock.h"
 #include "chrono/physics/ChLinkMate.h"
 #include "chrono/physics/ChLinkDistance.h"
@@ -16,6 +17,7 @@
 #include "chrono/collision/bullet/ChCollisionSystemBullet.h"
 #include "chrono/collision/ChCollisionShapeConvexHull.h"
 #include "chrono/collision/bullet/ChCollisionUtilsBullet.h"
+#include "chrono/solver/ChSolverBB.h"
 #include "chrono_irrlicht/ChVisualSystemIrrlicht.h"
 #include "chrono/utils/ChCompositeInertia.h"
 #include <iostream>
@@ -27,45 +29,14 @@
 #include <cctype>
 #include <unordered_map>
 #include "chrono_thirdparty/filesystem/path.h"
-
-#include "chrono/fea/ChMesh.h"
-#include "chrono/fea/ChBuilderBeam.h"
-#include "chrono/fea/ChElementBeamIGA.h"
-#include "chrono/assets/ChVisualShapeFEA.h"
-#include "chrono/fea/ChContactSurfaceNodeCloud.h"
-#include "chrono/fea/ChContactSurfaceMesh.h"
-
-#include "chrono/timestepper/ChTimestepper.h"
-#include <cmath>
-#include <filesystem>
-
-//#define CHRONO_PARDISO_MKLandADMM
-#define CHRONO_NSC
-//#define CHRONO_SMC
-
-#ifdef CHRONO_PARDISO_MKLandADMM
-	#include "chrono_pardisomkl/ChSolverPardisoMKL.h"
-	#include "chrono/solver/ChIterativeSolverLS.h"
-	#include "chrono/solver/ChSolverADMM.h"
-#endif
-
-#ifdef CHRONO_NSC
-#include "chrono/physics/ChSystemNSC.h"
-#include "chrono/physics/ChContactContainerNSC.h"
-#include "chrono/solver/ChSolverBB.h"
-#endif
-
-#ifdef CHRONO_SMC
-	#include "chrono/physics/ChSystemSMC.h"
-	#include "chrono/physics/ChContactContainerSMC.h"
-	#include "chrono/solver/ChIterativeSolverLS.h"
-#endif
+#include <stdexcept>
+#include "chrono/core/ChRandom.h"
+//#include <exception>
 
 // Use the namespace of Chrono
 
 using namespace chrono;
 using namespace irrlicht;
-using namespace chrono::fea;
 
 // Use the main namespaces of Irrlicht
 using namespace irr;
@@ -90,13 +61,8 @@ double GLOBAL_density = 1800; // density in Kg/m3
 double SPHERE_density = 2700; // density in Kg/m3
 float  GLOBAL_friction = 0.5f;
 float  GLOBAL_friction_spheres = 0.3f;
-float  GLOBAL_static_friction = 0.5f;
-float  GLOBAL_kinetic_friction = 0.5f;
 float  GLOBAL_damping = 0.07f; // original value = 0.2f
 // float  GLOBAL_compliance = 2e-8f;
-float  GLOBAL_restitution = 0.1f;
-float  GLOBAL_young = 1e8f;
-float  GLOBAL_adhesion = 0.0f;
 float  GLOBAL_compliance = 5e-9f;
 float  GLOBAL_compliance_spheres = 5e-9f;
 float  GLOBAL_rolling_friction = 0;
@@ -104,39 +70,38 @@ float  GLOBAL_spinning_friction = 0;
 float  GLOBAL_rolling_compliance = 0;
 float  GLOBAL_spinning_compliance = 0;
 double GLOBAL_penetrationrecovery = 0.005;
-bool   GLOBAL_warmstart = false;
+bool   GLOBAL_warmstart = true;
 
-std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_X; // motion on x direction
-std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Y; // motion on y (vertical) direction
-std::shared_ptr<ChFunction_Recorder> GLOBAL_motion_Z; // motion on z direction
+std::shared_ptr<ChFunctionInterp> GLOBAL_motion_X; // motion on x direction
+std::shared_ptr<ChFunctionInterp> GLOBAL_motion_Y; // motion on y (vertical) direction
+std::shared_ptr<ChFunctionInterp> GLOBAL_motion_Z; // motion on z direction
 //double GLOBAL_motion_timestep = 0.01; // timestep for sampled earthquake motion 
 double GLOBAL_motion_amplifier = 1.0; // scale x,y,z motion by this factor
-double GLOBAL_timestep = 0.00001; // timestep for timestepper integrator
+double GLOBAL_timestep = 0.001; // timestep for timestepper integrator
 bool GLOBAL_use_motions = false;
-int GLOBAL_iterations = 1000;
+int GLOBAL_iterations = 5000;
+double GLOBAL_tolerance = 1e-5;
 double GLOBAL_totmass = 0;
 
 int Spring_Counter = 0;
 double Spring_Storage_K[300][2];
 //double my_pos994[7][1];
 
-int Beam_Counter = 0;
-
 // Load brick pattern from disk
 // Create a bunch of ChronoENGINE rigid bodies 
 
 void load_brick_file(ChSystem& mphysicalSystem, const char* filename, 
-                    std::shared_ptr<ChMaterialSurface> mmaterial, 
+                    std::shared_ptr<ChContactMaterial> mmaterial, 
                     std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map,
 					bool do_collide) {
 
-    GetLog() << "Parsing " << filename << " brick file... \n";
+    std::cout << "Parsing " << filename << " brick file... \n";
 
 	GLOBAL_totmass = 0;
 
     std::fstream fin(filename);
 	if (!fin.good())
-		throw ChException("ERROR opening .txt file with bricks: " + std::string(filename) + "\n");
+		throw std::runtime_error("ERROR opening .dat file with bricks: " + std::string(filename) + "\n");
 
     int added_bricks = 0;
 
@@ -175,7 +140,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 tokenasterisk.push_back(false);
 
 				std::istringstream stoken(token);
-                //GetLog() << "  token n." << ntokens << " is: "<< stoken.str().c_str() << "\n";
+                //std::cout << "  token n." << ntokens << " is: "<< stoken.str().c_str() << "\n";
 				/* if (token == "*") {
                     tokenasterisk[ntokens] = true; 
                     tokenvals[ntokens] = 0;
@@ -203,7 +168,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 			double my_density = (double)tokenvals[4];
             int token_stride = 5;
 
-            ChVector<> my_force;
+            ChVector3<> my_force;
             if (GLOBAL_load_forces) {
                 my_force.x() = tokenvals[token_stride+0];
                 my_force.y() = tokenvals[token_stride+1];
@@ -212,26 +177,26 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 if (GLOBAL_swap_zy) std::swap(my_force.y(), my_force.z());
             }
 
-            ChVector<> my_reference;
+            ChVector3<> my_reference;
             my_reference.x() = tokenvals[token_stride+0];
             my_reference.y() = tokenvals[token_stride+1];
             my_reference.z() = tokenvals[token_stride+2];
             if (GLOBAL_swap_zy) std::swap(my_reference.y(), my_reference.z());
             token_stride += 3;
             
-            std::vector< std::vector< ChVector<> > > my_vertexes;
-            my_vertexes.push_back(std::vector< ChVector<> >());
+            std::vector< std::vector< ChVector3<> > > my_vertexes;
+            my_vertexes.push_back(std::vector< ChVector3<> >());
             while (true) {
 				if (tokenasterisk[token_stride] == true) {
 					token_stride += 1; // skip asterisk separator or 9999, if any
-					my_vertexes.push_back(std::vector< ChVector<> >()); // begin other list of convex hulls
+					my_vertexes.push_back(std::vector< ChVector3<> >()); // begin other list of convex hulls
 				}
 
                 if (token_stride+2 >= ntokens) {
-                    throw ChException("ERROR in .txt file, format is: ID, fixed, visible, yielding, density, Fx, Fy, Fz, Refx,Refy,Refz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
+                    throw std::runtime_error("ERROR in .dat file, format is: ID, fixed, visible, yielding, density, Fx, Fy, Fz, Refx,Refy,Refz, and three x y z coords, each per brick corner, see line:\n"+ line+"\n");
                     break;
                 }
-                ChVector<> my_point;
+                ChVector3<> my_point;
                 my_point.x() = tokenvals[token_stride+0];
                 my_point.y() = tokenvals[token_stride+1];
                 my_point.z() = tokenvals[token_stride+2];
@@ -262,7 +227,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 }
 
                 double i_mass;
-                ChVector<> i_baricenter;
+                ChVector3<> i_baricenter;
                 ChMatrix33<> i_inertia;
                 vshape->GetMesh()->ComputeMassProperties(true, i_mass, i_baricenter, i_inertia);
 
@@ -272,10 +237,10 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
                 if (true) {
                     // avoid passing to collision the inner points discarded by convex hull
                     // processor, so use mesh vertexes instead of all argument points
-                    std::vector<ChVector<> > points_reduced;
-                    points_reduced.resize(vshape->GetMesh()->getCoordsVertices().size());
-                    for (unsigned int i = 0; i < vshape->GetMesh()->getCoordsVertices().size(); ++i)
-                        points_reduced[i] = vshape->GetMesh()->getCoordsVertices()[i];
+                    std::vector<ChVector3<> > points_reduced;
+                    points_reduced.resize(vshape->GetMesh()->GetCoordsVertices().size());
+                    for (unsigned int i = 0; i < vshape->GetMesh()->GetCoordsVertices().size(); ++i)
+                        points_reduced[i] = vshape->GetMesh()->GetCoordsVertices()[i];
 
                     auto cshape = chrono_types::make_shared<ChCollisionShapeConvexHull>(mmaterial, points_reduced);
                     my_body->AddCollisionShape(cshape, ChFrame<>()); // TODO: check ChFrame  
@@ -290,25 +255,25 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
             //my_body->SetDensity((float)GLOBAL_density);
             my_body->SetMass(composite_inertia.GetMass() * GLOBAL_density);
-            my_body->SetInertiaXX(ChVector<>(principal_I[0] * GLOBAL_density, principal_I[1] * GLOBAL_density, principal_I[2] * GLOBAL_density));
+            my_body->SetInertiaXX(ChVector3<>(principal_I[0] * GLOBAL_density, principal_I[1] * GLOBAL_density, principal_I[2] * GLOBAL_density));
 
 			if (!my_fixed) {
 				GLOBAL_totmass += my_body->GetMass();
 			}
-			//GetLog() << " block mass=" << my_body->GetMass() << "   volume=" << composite_inertia.GetMass() << "\n";
+			//std::cout << " block mass=" << my_body->GetMass() << "   volume=" << composite_inertia.GetMass() << "\n";
 
             // Set the COG coordinates to barycenter, without displacing the REF reference
-            my_body->SetFrame_COG_to_REF(ChFrame<>(composite_inertia.GetCOM(), principal_inertia_csys));
+            my_body->SetFrameCOMToRef(ChFrame<>(composite_inertia.GetCOM(), principal_inertia_csys));
 
 
 			if (do_collide)
-				my_body->SetCollide(true);
+				my_body->EnableCollision(true);
 
-            my_body->SetIdentifier(my_ID);
-            my_body->Accumulate_force(my_force, VNULL, true); // add force to COG of body.
+            my_body->SetTag(my_ID);
+            my_body->AccumulateForce(my_force, VNULL, true); // add force to COG of body.
             my_body->GetCollisionModel()->SetAllShapesMaterial(mmaterial); //TODO: check if correct. Was my_body->SetMaterialSurface(mmaterial);
             
-            my_body->SetFrame_REF_to_abs(ChFrame<>(my_reference));
+            my_body->SetFrameRefToAbs(ChFrame<>(my_reference));
 
             if (my_body->GetVisualModel()){
                 if (my_density > 1750) {
@@ -321,7 +286,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 				    else {
 					    if (my_density != 2000) {
 						    // Set the color of body by randomizing a gray shade (if high density)
-                            float mgray = 0.6 + 0.4*ChRandom();
+                            float mgray = 0.6 + 0.4*ChRandom::Get();
                             for (auto s_sel = 0; s_sel < my_body->GetVisualModel()->GetNumShapes(); ++s_sel){
                                 my_body->GetVisualShape(s_sel)->SetColor(ChColor(mgray, mgray, mgray));
                             }
@@ -348,7 +313,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 			//auto my_ground = chrono_types::make_shared<ChBodyEasyBox>(10, 1, 10, 1800, true, true);
 			//mphysicalSystem.Add(my_ground);
 			//my_ground->SetBodyFixed(true);
-			//my_ground->SetPos(ChVector<>(0, -5, 0));
+			//my_ground->SetPos(ChVector3<>(0, -5, 0));
 			//my_ground->SetMaterialSurface(mmaterial);
 			//my_ground->GetMaterialSurfaceNSC()->SetKfriction(1.0);
 			//auto mmmtexture = chrono_types::make_shared<ChTexture>(GetChronoDataFile("concrete.jpg"));
@@ -358,7 +323,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             if(my_fixed) {
                 if (GLOBAL_use_motions) {
 					if (my_yielding == 1) {
-						my_body->SetBodyFixed(true);
+						my_body->SetFixed(true);
 					}
 					else {
 						if (my_yielding == 2) {
@@ -370,29 +335,29 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 						}
 						if (my_yielding == 3) {
 							auto absolute_body = chrono_types::make_shared<ChBody>();
-							absolute_body->SetBodyFixed(true);
+							absolute_body->SetFixed(true);
 							mphysicalSystem.Add(absolute_body);
 							std::shared_ptr<ChLinkLockPrismatic> my_constr(new ChLinkLockPrismatic);
-							my_constr->Initialize(my_body, absolute_body, ChCoordsys<>(ChVector<>(0, 0, 0), chrono::Q_from_AngAxis(CH_C_PI / 2, VECT_Y)));
+							my_constr->Initialize(my_body, absolute_body, ChFrame<>(ChVector3<>(0, 0, 0), QuatFromAngleAxis(CH_PI / 2, VECT_Y)));
 							mphysicalSystem.Add(my_constr);
 						}
 						else {
 							// earthquake motion required: so "fixed" means "impose motion respect to a fixed body"
 							auto absolute_body = chrono_types::make_shared<ChBody>();
-							absolute_body->SetBodyFixed(true);
+							absolute_body->SetFixed(true);
 							mphysicalSystem.Add(absolute_body);
 							auto link_earthquake = chrono_types::make_shared<ChLinkLockLock>();
-							link_earthquake->Initialize(my_body, absolute_body, ChCoordsys<>(my_body->GetPos()) );
-							link_earthquake->SetMotion_X(GLOBAL_motion_X);
-							link_earthquake->SetMotion_Y(GLOBAL_motion_Y);
-							link_earthquake->SetMotion_Z(GLOBAL_motion_Z);
+							link_earthquake->Initialize(my_body, absolute_body, ChFrame<>(my_body->GetPos()) );
+							link_earthquake->SetMotionX(GLOBAL_motion_X);
+							link_earthquake->SetMotionY(GLOBAL_motion_Y);
+							link_earthquake->SetMotionZ(GLOBAL_motion_Z);
 							mphysicalSystem.Add(link_earthquake);
 						}
 					}
                 }
                 else {
                     // simplier approach: no earthquake motion, just fix body
-                    my_body->SetBodyFixed(true);
+                    my_body->SetFixed(true);
                 }
             }
             
@@ -404,8 +369,8 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 
 	} // end while
 
-    GetLog() << " ...ok, parsed " << filename << " brick file successfully, created " << added_bricks << " bricks.\n";
-	GetLog() << " TOTAL MASS OF NOT FIXED BRICKS: " << GLOBAL_totmass << "\n\n";
+    std::cout << " ...ok, parsed " << filename << " brick file successfully, created " << added_bricks << " bricks.\n";
+	std::cout << " TOTAL MASS OF NOT FIXED BRICKS: " << GLOBAL_totmass << "\n\n";
 }
 
 
@@ -413,16 +378,16 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 // Create a bunch of ChronoENGINE rigid spheres 
 // ID number must contiunue the list of rigid bodies!!!
 
-void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::shared_ptr<ChMaterialSurface> mmateriall, 
+void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::shared_ptr<ChContactMaterial> mmateriall, 
 	std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
 
-	GetLog() << "Parsing " << filename << " sphere file... \n";
+	std::cout << "Parsing " << filename << " sphere file... \n";
 
 	GLOBAL_totmass = 0;
 
 	std::fstream fin(filename);
 	if (!fin.good())
-		throw ChException("ERROR opening .txt file with spheres: " + std::string(filename) + "\n");
+		throw std::runtime_error("ERROR opening .dat file with spheres: " + std::string(filename) + "\n");
 
 	int added_spheres = 0;
 
@@ -462,7 +427,7 @@ void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::sh
 				tokenasterisk.push_back(false);
 
 				std::istringstream stoken(token);
-				//GetLog() << "  token n." << ntokens << " is: "<< stoken.str().c_str() << "\n";
+				//std::cout << "  token n." << ntokens << " is: "<< stoken.str().c_str() << "\n";
 				if (token == "*") {
 					tokenasterisk[ntokens] = true;
 					tokenvals[ntokens] = 0;
@@ -476,7 +441,7 @@ void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::sh
 			++added_spheres;
 
 			if (ntokens != 8)
-				throw ChException("ERROR in .txt file of spheres, format is: ID, Fixed, Visible, Density, Ref.x, Ref.y, Ref.z, Radius :\n" + line + "\n");
+				throw std::runtime_error("ERROR in .dat file of spheres, format is: ID, Fixed, Visible, Density, Ref.x, Ref.y, Ref.z, Radius :\n" + line + "\n");
 
 			int  my_ID = (int)tokenvals[0];
 			bool my_fixed = (bool)tokenvals[1];
@@ -484,7 +449,7 @@ void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::sh
 			double my_SPHERE_density = (double)tokenvals[3];
 			int token_stride = 4;
 
-			ChVector<> my_reference;
+			ChVector3<> my_reference;
 			my_reference.x() = tokenvals[token_stride + 0];
 			my_reference.y() = tokenvals[token_stride + 1];
 			my_reference.z() = tokenvals[token_stride + 2];
@@ -495,17 +460,17 @@ void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::sh
 
 			// Create a sphere:
 			auto my_sphere = chrono_types::make_shared<ChBodyEasySphere>(my_radius, my_SPHERE_density, my_visible, true, mmateriall);
-            float colore = 0.10 * ChRandom();
+            float colore = 0.10 * ChRandom::Get();
             my_sphere->GetVisualShape(0)->SetColor(ChColor(0.80+colore, 0.45+colore, 0.32+3*colore));
 			my_sphere->SetPos(my_reference);
-			my_sphere->SetIdentifier(my_ID);
+			my_sphere->SetTag(my_ID);
 
 
 			mphysicalSystem.Add(my_sphere);
 
 			// Fix to ground 
 			if (my_fixed) {
-				my_sphere->SetBodyFixed(true);
+				my_sphere->SetFixed(true);
 			}
 
 			// add body to map
@@ -515,7 +480,7 @@ void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::sh
 
 	} // end while
 
-	GetLog() << " ...ok, parsed " << filename << " sphere file successfully, created " << added_spheres << " spheres.\n\n";
+	std::cout << " ...ok, parsed " << filename << " sphere file successfully, created " << added_spheres << " spheres.\n\n";
 }
 
 
@@ -523,11 +488,11 @@ void load_spheres_file(ChSystem& mphysicalSystem, std::string& filename, std::sh
 
 void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
 
-    GetLog() << "Parsing " << filename << " spring file... \n";
+    std::cout << "Parsing " << filename << " spring file... \n";
 
     std::fstream fin(filename);
 	if (!fin.good())
-		throw ChException("ERROR opening .txt file with springs: " + filename + "\n");
+		throw std::runtime_error("ERROR opening .dat file with springs: " + filename + "\n");
 
 	int added_springs = 0;
 
@@ -568,14 +533,14 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 			++added_springs;
 
             if (ntokens != 11)
-                throw ChException("ERROR in .txt file of springs, format is: ID, IDbodyA, x,y,z, IDbodyB, x,y,z,  k, L0 :\n"+ line+"\n");
+                throw std::runtime_error("ERROR in .dat file of springs, format is: ID, IDbodyA, x,y,z, IDbodyB, x,y,z,  k, L0 :\n"+ line+"\n");
 
             int  my_ID      = (int)tokenvals[0];
 
             int my_IDbodyA = (int)tokenvals[1]; 
             if (my_body_map.find(my_IDbodyA) == my_body_map.end())
-                throw ChException("ERROR in .txt file of springs, body with identifier bodyA=" + std::to_string(my_IDbodyA) +  " not found :\n"+ line+"\n");
-            ChVector<> my_referenceA;
+                throw std::runtime_error("ERROR in .dat file of springs, body with identifier bodyA=" + std::to_string(my_IDbodyA) +  " not found :\n"+ line+"\n");
+            ChVector3<> my_referenceA;
             my_referenceA.x() = tokenvals[2];
             my_referenceA.y() = tokenvals[3];
             my_referenceA.z() = tokenvals[4];
@@ -583,8 +548,8 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 
             int my_IDbodyB = (int)tokenvals[5];  
             if (my_body_map.find(my_IDbodyB) == my_body_map.end())
-                throw ChException("ERROR in .txt file of springs, body with identifier bodyB=" + std::to_string(my_IDbodyB) +  " not found :\n"+ line+"\n");
-            ChVector<> my_referenceB;
+                throw std::runtime_error("ERROR in .dat file of springs, body with identifier bodyB=" + std::to_string(my_IDbodyB) +  " not found :\n"+ line+"\n");
+            ChVector3<> my_referenceB;
             my_referenceB.x() = tokenvals[6];
             my_referenceB.y() = tokenvals[7];
             my_referenceB.z() = tokenvals[8];
@@ -598,11 +563,11 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
             
             // Create a spring:
             auto my_spring = chrono_types::make_shared<ChLinkTSDA>();
-            my_spring->SetIdentifier(my_ID);
+			my_spring->SetTag(my_ID);
             std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
             std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
-            GetLog() << "mbodyA ID: " << mbodyA->GetIdentifier() << " for ID " << my_IDbodyA << "  pos: " << mbodyA->GetPos() << "\n";
-            GetLog() << "mbodyB ID: " << mbodyB->GetIdentifier() << " for ID " << my_IDbodyB << "  pos: " << mbodyB->GetPos() << "\n";
+            std::cout << "mbodyA ID: " << mbodyA->GetTag() << " for ID " << my_IDbodyA << "  pos: " << mbodyA->GetPos() << "\n";
+            std::cout << "mbodyB ID: " << mbodyB->GetTag() << " for ID " << my_IDbodyB << "  pos: " << mbodyB->GetPos() << "\n";
             my_spring->Initialize(mbodyA, mbodyB, false, my_referenceA, my_referenceB);
             my_spring->SetRestLength(my_L0);
             my_spring->SetSpringCoefficient(my_k);
@@ -615,208 +580,27 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
 
 	} // end while
 
-    GetLog() << " ...ok, parsed " << filename << " spring file successfully, created " << added_springs  << " springs.\n";
-	GetLog() << " ID and corresponding spring constant: \n ";
+    std::cout << " ...ok, parsed " << filename << " spring file successfully, created " << added_springs  << " springs.\n";
+	std::cout << " ID and corresponding spring constant: \n ";
 	int ck = 0;
 	for (int ck = 0; ck < added_springs; ck ++)
 	{
-		GetLog() << Spring_Storage_K[ck] [1] << "  ...  " << Spring_Storage_K[ck][2] << " \n ";
+		std::cout << Spring_Storage_K[ck] [1] << "  ...  " << Spring_Storage_K[ck][2] << " \n ";
 	}
 
 	Spring_Counter = added_springs;
 }
 
-// Load beams from disk rectangular or circular cross section)
-
-void load_beam_file(ChSystem& mphysicalSystem, std::string& filename, std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
-
-	GetLog() << "Parsing " << filename << " spring file... \n";
-
-	std::fstream fin(filename);
-	if (!fin.good())
-		throw ChException("ERROR opening .txt file with springs: " + filename + "\n");
-
-	int added_beams = 0;
-
-	std::string line;
-
-	// Parse the file line-by-line
-	while (std::getline(fin, line))
-	{
-		//trims white space from the beginning of the string
-		line.erase(line.begin(), find_if(line.begin(), line.end(), [](int c) {return !std::isspace(c); }));
-
-		// skip empty lines
-		if (line[0] == 0)
-			continue;
-
-		// skip comments
-		if (line[0] == '#') {
-			continue;
-		}
-
-		// a normal line should contain beam data:
-		if (true)
-		{
-			double tokenvals[300];
-			int ntokens = 0;
-
-			std::string token;
-			std::istringstream ss(line);
-
-			// parse line in format:
-			// ID, IDbodyA, x,y,z, IDbodyB, x,y,z, density, Young modulus, Poisson ratio, section type, dimension 1, dimension 2, rest length
-			while (std::getline(ss, token, ',') && ntokens < 300)
-			{
-				std::istringstream stoken(token);
-				stoken >> tokenvals[ntokens];
-				++ntokens;
-			}
-			++added_beams;
-
-			if (ntokens != 16)
-				throw ChException("ERROR in .txt file of beams:\n" + line + "\n");
-
-			int  my_ID = (int)tokenvals[0];
-
-			int my_IDbodyA = (int)tokenvals[1];
-			if (my_body_map.find(my_IDbodyA) == my_body_map.end())
-				throw ChException("ERROR in .txt file of beams, body with identifier bodyA=" + std::to_string(my_IDbodyA) + " not found :\n" + line + "\n");
-			ChVector<> my_referenceA;
-			my_referenceA.x() = tokenvals[2];
-			my_referenceA.y() = tokenvals[3];
-			my_referenceA.z() = tokenvals[4];
-			if (GLOBAL_swap_zy) std::swap(my_referenceA.y(), my_referenceA.z());
-
-			int my_IDbodyB = (int)tokenvals[5];
-			if (my_body_map.find(my_IDbodyB) == my_body_map.end())
-				throw ChException("ERROR in .txt file of beams, body with identifier bodyB=" + std::to_string(my_IDbodyB) + " not found :\n" + line + "\n");
-			ChVector<> my_referenceB;
-			my_referenceB.x() = tokenvals[6];
-			my_referenceB.y() = tokenvals[7];
-			my_referenceB.z() = tokenvals[8];
-			if (GLOBAL_swap_zy) std::swap(my_referenceB.y(), my_referenceB.z());
-
-			double my_density = tokenvals[9];
-			double my_young = tokenvals[10];
-			double my_poisson = tokenvals[11];
-			double my_type = tokenvals[12];
-			double my_dim1 = tokenvals[13];
-			double my_dim2 = tokenvals[14];
-			double my_length = tokenvals[15];
-
-			// Create a mesh, that is a container for groups
-			// of elements and their referenced nodes.
-			// Remember to add it to the system.
-
-			auto my_mesh = chrono_types::make_shared<ChMesh>();
-			my_mesh->SetIdentifier(my_ID);
-			my_mesh->SetAutomaticGravity(false);
-
-			// Create a cross section
-			// The faster way to define a section for basic circular or rectangular beams is to
-			// use the ChBeamSectionCosseratEasyCircular or ChBeamSectionCosseratEasyRectangular.
-
-			auto minertia = chrono_types::make_shared<ChInertiaCosseratSimple>();
-			if (my_type == 0) {
-				minertia->SetAsRectangularSection(my_dim1, my_dim2, my_density);  // width, height, density
-			}
-			if (my_type == 1) {
-				minertia->SetAsCircularSection(2 * my_dim1, my_density);  // radius, density
-			}
-			if ((my_type != 0) && (my_type != 1)) {
-				throw ChException("ERROR in .txt file of beams: cross section type.\n");
-			}
-
-			auto melasticity = chrono_types::make_shared<ChElasticityCosseratSimple>();
-			melasticity->SetYoungModulus(my_young);
-			melasticity->SetGwithPoissonRatio(my_poisson);
-			if (my_type == 0) {
-				melasticity->SetAsRectangularSection(my_dim1, my_dim2);  // automatically sets A, Ixx, Iyy, Ksy, Ksz and J
-			}
-			if (my_type == 1) {
-				melasticity->SetAsCircularSection(2 * my_dim1);  // automatically sets A, Ixx, Iyy, Ksy, Ksz and J
-			}
-
-			auto msection = chrono_types::make_shared<ChBeamSectionCosserat>(minertia, melasticity);   // the constitutive model for inertia and elasticity
-			if (my_type == 0) {
-				msection->SetDrawThickness(my_dim1, my_dim2);
-			}
-			if (my_type == 1) {
-				msection->SetCircular(true);
-				msection->SetDrawCircularRadius(my_dim1);
-			}
-
-			// Use the ChBuilderBeamIGA tool for creating a straight rod
-			// divided in Nel elements:
-
-			int nsections = 10;
-			int order = 3;
-			ChBuilderBeamIGA builder;
-			builder.BuildBeam(my_mesh,									// the mesh to put the elements in
-				msection,												// section of the beam
-				nsections,												// number of sections (spans)
-				ChVector(tokenvals[2], tokenvals[3], tokenvals[4]),     // start point
-				ChVector(tokenvals[6], tokenvals[7], tokenvals[8]),		// end point
-				VECT_Y,													// suggested Y direction of section
-				order);													// order (3 = cubic, etc)
-
-			std::vector<std::shared_ptr<ChElementBeamIGA>> beamElements = builder.GetLastBeamElements();
-			for (auto& element : beamElements) {
-				element->SetRestLength(my_length / nsections);
-			}
-
-			std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
-			std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
-
-			// Attach a visualization of the FEM mesh.
-
-			auto mvisualizebeamA = chrono_types::make_shared<ChVisualShapeFEA>(my_mesh);
-			mvisualizebeamA->SetFEMdataType(ChVisualShapeFEA::DataType::SURFACE);
-			mvisualizebeamA->SetSmoothFaces(true);
-			my_mesh->AddVisualShapeFEA(mvisualizebeamA);
-
-			//auto mvisualizebeamC = chrono_types::make_shared<ChVisualShapeFEA>(my_mesh);
-			//mvisualizebeamC->SetFEMglyphType(ChVisualShapeFEA::GlyphType::NODE_CSYS);
-			//mvisualizebeamC->SetFEMdataType(ChVisualShapeFEA::DataType::NONE);
-			//mvisualizebeamC->SetSymbolsThickness(0.006);
-			//mvisualizebeamC->SetSymbolsScale(0.01);
-			//mvisualizebeamC->SetZbufferHide(false);
-			//my_mesh->AddVisualShapeFEA(mvisualizebeamC);
-
-			// This is needed if you want to see things in Irrlicht 3D view.
-			mphysicalSystem.Add(my_mesh);
-
-			// clamp1
-			auto clamp1 = chrono_types::make_shared<ChLinkMateFix>();
-			clamp1->Initialize(builder.GetLastBeamNodes().front(), mbodyA, ChFrame<>(tokenvals[2], tokenvals[3], tokenvals[4]));
-			clamp1->SetDisabled(false);
-			mphysicalSystem.Add(clamp1);
-
-			// clamp2
-			auto clamp2 = chrono_types::make_shared<ChLinkMateFix>();
-			clamp2->Initialize(builder.GetLastBeamNodes().back(), mbodyB, ChFrame<>(tokenvals[2], tokenvals[3], tokenvals[4]));
-			clamp2->SetDisabled(false);
-			mphysicalSystem.Add(clamp2);
-
-		}
-
-	} // end while
-
-	GetLog() << " ...ok, parsed " << filename << " beam file successfully, created " << added_beams << " beams.\n";
-
-	Beam_Counter = added_beams;
-}
 
 // Load rigid links (distance contraint) from disk
 
 void load_distance_file(ChSystem& mphysicalSystem, std::string& filename, std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
 
-	GetLog() << "Parsing " << filename << " distance file... \n";
+	std::cout << "Parsing " << filename << " distance file... \n";
 
 	std::fstream fin(filename);
 	if (!fin.good())
-		throw ChException("ERROR opening .txt file with distances: " + filename + "\n");
+		throw std::runtime_error("ERROR opening .dat file with distances: " + filename + "\n");
 
 	int added_dist = 0;
 
@@ -858,14 +642,14 @@ void load_distance_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 			++added_dist;
 
 			if (ntokens != 9)
-				throw ChException("ERROR in .txt file of distances, format is: ID, IDbodyA, x,y,z, IDbodyB, x,y,z :\n" + line + "\n");
+				throw std::runtime_error("ERROR in .dat file of distances, format is: ID, IDbodyA, x,y,z, IDbodyB, x,y,z :\n" + line + "\n");
 
 			int  my_ID = (int)tokenvals[0];
 
 			int my_IDbodyA = (int)tokenvals[1];
 			if (my_body_map.find(my_IDbodyA) == my_body_map.end())
-				throw ChException("ERROR in .txt file of distances, body with identifier bodyA=" + std::to_string(my_IDbodyA) + " not found :\n" + line + "\n");
-			ChVector<> my_referenceA;
+				throw std::runtime_error("ERROR in .dat file of distances, body with identifier bodyA=" + std::to_string(my_IDbodyA) + " not found :\n" + line + "\n");
+			ChVector3<> my_referenceA;
 			my_referenceA.x() = tokenvals[2];
 			my_referenceA.y() = tokenvals[3];
 			my_referenceA.z() = tokenvals[4];
@@ -873,8 +657,8 @@ void load_distance_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 
 			int my_IDbodyB = (int)tokenvals[5];
 			if (my_body_map.find(my_IDbodyB) == my_body_map.end())
-				throw ChException("ERROR in .txt file of distances, body with identifier bodyB=" + std::to_string(my_IDbodyB) + " not found :\n" + line + "\n");
-			ChVector<> my_referenceB;
+				throw std::runtime_error("ERROR in .dat file of distances, body with identifier bodyB=" + std::to_string(my_IDbodyB) + " not found :\n" + line + "\n");
+			ChVector3<> my_referenceB;
 			my_referenceB.x() = tokenvals[6];
 			my_referenceB.y() = tokenvals[7];
 			my_referenceB.z() = tokenvals[8];
@@ -882,11 +666,11 @@ void load_distance_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 
 			// Create a rigid link:
 			std::shared_ptr<ChLinkDistance> my_dist(new ChLinkDistance());
-			my_dist->SetIdentifier(my_ID);
+			my_dist->SetTag(my_ID);
 			std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbodyA];
 			std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbodyB];
-			GetLog() << "mbodyA ID: " << mbodyA->GetIdentifier() << " for ID " << my_IDbodyA << "  pos: " << mbodyA->GetPos() << "\n";
-			GetLog() << "mbodyB ID: " << mbodyB->GetIdentifier() << " for ID " << my_IDbodyB << "  pos: " << mbodyB->GetPos() << "\n";
+			std::cout << "mbodyA ID: " << mbodyA->GetTag() << " for ID " << my_IDbodyA << "  pos: " << mbodyA->GetPos() << "\n";
+			std::cout << "mbodyB ID: " << mbodyB->GetTag() << " for ID " << my_IDbodyB << "  pos: " << mbodyB->GetPos() << "\n";
 			my_dist->Initialize(mbodyA, mbodyB, false, my_referenceA, my_referenceB, true);
 			mphysicalSystem.Add(my_dist);
 
@@ -897,7 +681,7 @@ void load_distance_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 
 	} // end while
 
-	GetLog() << " ...ok, parsed " << filename << " distance file successfully, created " << added_dist << " constraints.\n";
+	std::cout << " ...ok, parsed " << filename << " distance file successfully, created " << added_dist << " constraints.\n";
 	
 }
 
@@ -905,11 +689,11 @@ void load_distance_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 
 void load_line_file(ChSystem& mphysicalSystem, std::string& filename, std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map) {
 
-	GetLog() << "Parsing " << filename << " line file... \n";
+	std::cout << "Parsing " << filename << " line file... \n";
 
 	std::fstream fin(filename);
 	if (!fin.good())
-		throw ChException("ERROR opening .txt file with lines: " + filename + "\n");
+		throw std::runtime_error("ERROR opening .dat file with lines: " + filename + "\n");
 
 	int added_line = 0;
 
@@ -951,20 +735,20 @@ void load_line_file(ChSystem& mphysicalSystem, std::string& filename, std::unord
 			++added_line;
 
 			if (ntokens != 8)
-				throw ChException("ERROR in .txt file of lines, format is: ID, IDbody, x,y,z, x,y,z :\n" + line + "\n");
+				throw std::runtime_error("ERROR in .dat file of lines, format is: ID, IDbody, x,y,z, x,y,z :\n" + line + "\n");
 			
 			int  my_ID = (int)tokenvals[0];
 
 			int my_IDbody = (int)tokenvals[1];
 			if (my_body_map.find(my_IDbody) == my_body_map.end())
-				throw ChException("ERROR in .txt file of lines, body with identifier " + std::to_string(my_IDbody) + " not found :\n" + line + "\n");
-			ChVector<> my_referenceA;
+				throw std::runtime_error("ERROR in .dat file of lines, body with identifier " + std::to_string(my_IDbody) + " not found :\n" + line + "\n");
+			ChVector3<> my_referenceA;
 			my_referenceA.x() = tokenvals[2];
 			my_referenceA.y() = tokenvals[3];
 			my_referenceA.z() = tokenvals[4];
 			if (GLOBAL_swap_zy) std::swap(my_referenceA.y(), my_referenceA.z());
 
-			ChVector<> my_referenceB;
+			ChVector3<> my_referenceB;
 			my_referenceB.x() = tokenvals[5];
 			my_referenceB.y() = tokenvals[6];
 			my_referenceB.z() = tokenvals[7];
@@ -972,7 +756,7 @@ void load_line_file(ChSystem& mphysicalSystem, std::string& filename, std::unord
 
 			// Create a rigid link:
 			std::shared_ptr<ChLinkDistance> my_dist(new ChLinkDistance());
-			my_dist->SetIdentifier(my_ID);
+			my_dist->SetTag(my_ID);
 			std::shared_ptr<ChBody> mbodyA = my_body_map[my_IDbody];
 			std::shared_ptr<ChBody> mbodyB = my_body_map[my_IDbody];
 			my_dist->Initialize(mbodyA, mbodyB, false, my_referenceA, my_referenceB, true);
@@ -985,7 +769,7 @@ void load_line_file(ChSystem& mphysicalSystem, std::string& filename, std::unord
 
 	} // end while
 
-	GetLog() << " ...ok, parsed " << filename << " line file successfully, created " << added_line << " constraints.\n";
+	std::cout << " ...ok, parsed " << filename << " line file successfully, created " << added_line << " constraints.\n";
 
 }
 
@@ -994,7 +778,7 @@ void load_line_file(ChSystem& mphysicalSystem, std::string& filename, std::unord
 // Load precomputed contact positions from disk
 class PrecomputedContact {
 public:
-	PrecomputedContact(const std::shared_ptr<ChBody> mbodyA, const std::shared_ptr<ChBody> mbodyB, const ChVector<> mpos_t0, const ChVector<> mnormal_t0)
+	PrecomputedContact(const std::shared_ptr<ChBody> mbodyA, const std::shared_ptr<ChBody> mbodyB, const ChVector3<> mpos_t0, const ChVector3<> mnormal_t0)
 		: bodyA(mbodyA), bodyB(mbodyB), pos_t0(mpos_t0), normal_t0(mnormal_t0)
 	{
 		rel_pos_A = bodyA->TransformPointParentToLocal(pos_t0);
@@ -1008,7 +792,7 @@ public:
 	// For time different than t0, absolute position of contact points might change from the mpos_t0 initial
 	// value, ex. they can detach or compenetrate a bit, so this can be used to retrieve the two points given
 	// the current position of the two blocks.
-	void GetAbsolutePoints(ChVector<>& abs_pos_A, ChVector<>& abs_pos_B, ChVector<>& abs_norm_A) {
+	void GetAbsolutePoints(ChVector3<>& abs_pos_A, ChVector3<>& abs_pos_B, ChVector3<>& abs_norm_A) {
 		abs_pos_A = bodyA->TransformPointLocalToParent(rel_pos_A);
 		abs_pos_B = bodyB->TransformPointLocalToParent(rel_pos_B);
 		abs_norm_A = bodyA->TransformDirectionLocalToParent(rel_normal_A);
@@ -1028,22 +812,22 @@ public:
 
 private:
 	float reaction_cache[3];
-	ChVector<> pos_t0;
-	ChVector<> normal_t0;
+	ChVector3<> pos_t0;
+	ChVector3<> normal_t0;
 	std::shared_ptr<ChBody> bodyA;
 	std::shared_ptr<ChBody> bodyB;
-	ChVector<> rel_pos_A;
-	ChVector<> rel_pos_B;
-	ChVector<> rel_normal_A;
+	ChVector3<> rel_pos_A;
+	ChVector3<> rel_pos_B;
+	ChVector3<> rel_normal_A;
 };
 
 void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::unordered_map<int, std::shared_ptr<ChBody>>& my_body_map, std::vector<PrecomputedContact>& mprecomputed_contacts) {
 
-	GetLog() << "Parsing " << filename << " file of precomputed contacts... \n";
+	std::cout << "Parsing " << filename << " file of precomputed contacts... \n";
 
 	std::fstream fin(filename);
 	if (!fin.good())
-		throw ChException("ERROR opening .txt file with precomputed contacts: " + filename + "\n");
+		throw std::runtime_error("ERROR opening .dat file with precomputed contacts: " + filename + "\n");
 
 	int added_springs = 0;
 
@@ -1084,23 +868,23 @@ void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 			++added_springs;
 
 			if (ntokens != 8)
-				throw ChException("ERROR in .txt file of contacts, format is: IDbodyA, IDbodyB, x,y,z, Nx,Ny,Nz but here is:\n" + line + "\n");
+				throw std::runtime_error("ERROR in .dat file of contacts, format is: IDbodyA, IDbodyB, x,y,z, Nx,Ny,Nz but here is:\n" + line + "\n");
 
 			int my_IDbodyA = (int)tokenvals[0];
 			if (my_body_map.find(my_IDbodyA) == my_body_map.end())
-				throw ChException("ERROR in .txt file of contacts, body with identifier bodyA=" + std::to_string(my_IDbodyA) + " not found :\n" + line + "\n");
+				throw std::runtime_error("ERROR in .dat file of contacts, body with identifier bodyA=" + std::to_string(my_IDbodyA) + " not found :\n" + line + "\n");
 
 			int my_IDbodyB = (int)tokenvals[1];
 			if (my_body_map.find(my_IDbodyB) == my_body_map.end())
-				throw ChException("ERROR in .txt file of contacts, body with identifier bodyB=" + std::to_string(my_IDbodyB) + " not found :\n" + line + "\n");
+				throw std::runtime_error("ERROR in .dat file of contacts, body with identifier bodyB=" + std::to_string(my_IDbodyB) + " not found :\n" + line + "\n");
 
-			ChVector<> my_abspos;
+			ChVector3<> my_abspos;
 			my_abspos.x() = tokenvals[2];
 			my_abspos.y() = tokenvals[3];
 			my_abspos.z() = tokenvals[4];
 			if (GLOBAL_swap_zy) std::swap(my_abspos.y(), my_abspos.z());
 
-			ChVector<> my_absnorm;
+			ChVector3<> my_absnorm;
 			my_absnorm.x() = tokenvals[5];
 			my_absnorm.y() = tokenvals[6];
 			my_absnorm.z() = tokenvals[7];
@@ -1116,7 +900,7 @@ void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 
 	} // end while
 
-	GetLog() << " ...ok, parsed " << filename << " spring file successfully, created " << added_springs << " springs.\n";
+	std::cout << " ...ok, parsed " << filename << " spring file successfully, created " << added_springs << " springs.\n";
 }
 
 
@@ -1124,33 +908,77 @@ void load_contacts_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 // Load seismic displacement function
 // from ascii file, each row is a value followed by CR. Time step is assumed constant.
 
-void load_motion(std::shared_ptr<ChFunction_Recorder> mrecorder, std::string filename_pos, double t_offset = 0, double factor =1.0, double timestep = 0.01)
+void load_motion(std::shared_ptr<ChFunctionInterp> mrecorder, std::string filename_pos, double t_offset = 0, double factor = 1.0, double timestep = 0.01)
 {
-    GetLog() << "Parsing " << filename_pos << " motion file... \n";
+	std::cout << "Parsing " << filename_pos << " motion file... \n";
 
-	ChStreamInAsciiFile mstream(filename_pos.c_str());
-	
+	//std::ifstream mstream(filename_pos.c_str());
+	std::fstream fin(filename_pos);
+	if (!fin.good())
+		throw std::runtime_error("ERROR opening .dat file with motion law: " + filename_pos + "\n");
+
 	mrecorder->Reset();
 
 	double time = 0;
-	while(!mstream.End_of_stream())
+	double value = 0;
+	//while(!mstream.eof())
+	//{
+	// Parse the file line-by-line
+	std::string line;
+	while (std::getline(fin, line))
 	{
+
+		/*
 		double value = 0;
 		try
 		{
 			mstream >> time >> value;
-			
-			//GetLog() << "  t=" << time + t_offset << "  p=" << value * factor << "\n";
-
+			std::cout << "  t=" << time + t_offset << "  p=" << value * factor << "\n";
 			mrecorder->AddPoint(time + t_offset, value * factor);
 		}
-		catch(ChException myerror)
+		catch(std::runtime_error myerror)
 		{
-			GetLog() << "  End parsing file " << filename_pos.c_str() << " because: \n  " << myerror.what() << "\n";
+			std::cout << "  End parsing file " << filename_pos.c_str() << " because: \n  " << myerror.what() << "\n";
 			break;
 		}
+		*/
+
+		//trims white space from the beginning of the string TODO: check if correct
+		line.erase(line.begin(), find_if(line.begin(), line.end(), [](int c) {return !std::isspace(c); }));
+		// skip empty lines
+		if (line[0] == 0)
+			continue;
+		// skip comments
+		if (line[0] == '#') {
+			continue;
+		}
+		// a normal line should contain contact data:
+		if (true)
+		{
+			double tokenvals[30];
+			int ntokens = 0;
+			std::string token;
+			std::istringstream ss(line);
+			// parse line in format:
+			// time, value
+			while (std::getline(ss, token, ',') && ntokens < 300)
+			{
+				std::istringstream stoken(token);
+				stoken >> tokenvals[ntokens];
+				++ntokens;
+			}
+
+			if (ntokens != 2)
+				throw std::runtime_error("ERROR in .dat motion file, format is: time, value, but here is:\n" + line + "\n");
+			double time = (double)tokenvals[0];
+			double value = (double)tokenvals[1];
+
+			mrecorder->AddPoint(time + t_offset, value * factor);
+			//std::cout << "  t=" << time + t_offset << "  p=" << value * factor << "\n";
+		}
+		
 	}
-	GetLog() << " ...ok, parsed " << filename_pos << " motion file successfully: " << mrecorder->GetPoints().size() << " samples with dt=" << timestep << "\n";
+	std::cout << " ...ok, parsed " << filename_pos << " motion file successfully: " << mrecorder->GetTable().size() << " samples \n";
 }
 
 
@@ -1162,16 +990,16 @@ void load_motion(std::shared_ptr<ChFunction_Recorder> mrecorder, std::string fil
 class _contact_reporter_class : public  ChContactContainer::ReportContactCallback
 {
     public:
-    ChStreamOutAsciiFile* mfile; // the file to save data into
+	std::ofstream* mfile; // the file to save data into
 
 	virtual bool OnReportContact(
-		const ChVector<>& pA,             ///< contact pA
-		const ChVector<>& pB,             ///< contact pB
+		const ChVector3<>& pA,             ///< contact pA
+		const ChVector3<>& pB,             ///< contact pB
 		const ChMatrix33<>& plane_coord,  ///< contact plane coordsystem (A column 'X' is contact normal)
 		const double& distance,           ///< contact distance
 		const double& eff_radius,         ///< effective radius of curvature at contact
-		const ChVector<>& react_forces,   ///< react.forces (if already computed). In coordsystem 'plane_coord'
-		const ChVector<>& react_torques,  ///< react.torques, if rolling friction (if already computed).
+		const ChVector3<>& react_forces,   ///< react.forces (if already computed). In coordsystem 'plane_coord'
+		const ChVector3<>& react_torques,  ///< react.torques, if rolling friction (if already computed).
 		ChContactable* contactobjA,  ///< model A (note: some containers may not support it and could be nullptr)
 		ChContactable* contactobjB   ///< model B (note: some containers may not support it and could be nullptr)
 	) override {
@@ -1179,28 +1007,28 @@ class _contact_reporter_class : public  ChContactContainer::ReportContactCallbac
         // For each contact, this function is executed. 
         // In this example, saves on ascii file:
         //   position xyz, direction xyz, normal impulse, tangent impulse U, tangent impulse V, modelA ID, modelB ID information is saved. 
-        (*mfile)    << contactobjA->GetPhysicsItem()->GetIdentifier() << ", "
-                    << contactobjB->GetPhysicsItem()->GetIdentifier() << ", "    
+        (*mfile)    << contactobjA->GetPhysicsItem()->GetTag() << ", "
+                    << contactobjB->GetPhysicsItem()->GetTag() << ", "    
                     << pA.x() << ", " 
                     << pA.y() << ", " 
                     << pA.z() << ", " 
                     << react_forces.x() << ", "
                     << react_forces.y() << ", "
                     << react_forces.z() << ", "
-                    << plane_coord.Get_A_Xaxis().x() << ", "
-                    << plane_coord.Get_A_Xaxis().y() << ", "
-                    << plane_coord.Get_A_Xaxis().z() << ", "
-                    << plane_coord.Get_A_Yaxis().x() << ", "
-                    << plane_coord.Get_A_Yaxis().y() << ", "
-                    << plane_coord.Get_A_Yaxis().z() << ", "
-                    << plane_coord.Get_A_Zaxis().x() << ", "
-                    << plane_coord.Get_A_Zaxis().y() << ", "
-                    << plane_coord.Get_A_Zaxis().z() << "\n";
+                    << plane_coord.GetAxisX().x() << ", "
+                    << plane_coord.GetAxisX().y() << ", "
+                    << plane_coord.GetAxisX().z() << ", "
+                    << plane_coord.GetAxisY().x() << ", "
+                    << plane_coord.GetAxisY().y() << ", "
+                    << plane_coord.GetAxisY().z() << ", "
+                    << plane_coord.GetAxisZ().x() << ", "
+                    << plane_coord.GetAxisZ().y() << ", "
+                    << plane_coord.GetAxisZ().z() << "\n";
         /*
-        GetLog() << "ReportContactCallback! \n";
-        GetLog() << plane_coord;
-        GetLog() << " dot product between X and Y ="<< Vdot(plane_coord.Get_A_Xaxis(), plane_coord.Get_A_Yaxis()) << "\n";
-        GetLog() << " dot product between Y and Z ="<< Vdot(plane_coord.Get_A_Yaxis(), plane_coord.Get_A_Zaxis()) << "\n\n";
+        std::cout << "ReportContactCallback! \n";
+        std::cout << plane_coord;
+        std::cout << " dot product between X and Y ="<< Vdot(plane_coord.Get_A_Xaxis(), plane_coord.Get_A_Yaxis()) << "\n";
+        std::cout << " dot product between Y and Z ="<< Vdot(plane_coord.Get_A_Yaxis(), plane_coord.Get_A_Zaxis()) << "\n\n";
         */
 
         return true;  // to continue scanning contacts
@@ -1211,22 +1039,19 @@ class _contact_reporter_class : public  ChContactContainer::ReportContactCallbac
 
 /// THE PROGRAM STARTS HERE!!!
 
-//int ii = 3;
-
 int main(int argc, char* argv[]) {
 
-    GLOBAL_motion_X = chrono_types::make_shared<ChFunction_Recorder>();
-    GLOBAL_motion_Y = chrono_types::make_shared<ChFunction_Recorder>();
-    GLOBAL_motion_Z = chrono_types::make_shared<ChFunction_Recorder>();
+    GLOBAL_motion_X = chrono_types::make_shared<ChFunctionInterp>();
+    GLOBAL_motion_Y = chrono_types::make_shared<ChFunctionInterp>();
+    GLOBAL_motion_Z = chrono_types::make_shared<ChFunctionInterp>();
 
     // Parse input command
 
-    char* filename = "bricks.txt"; // commento per Vale: variabile stringa, inizializzata a default
+    char* filename = "bricks.dat"; // commento per Vale: variabile stringa, inizializzata a default
     std::string file_motion_x = "";
     std::string file_motion_y = "";
     std::string file_motion_z = "";
 	std::string file_spheres = "";
-	std::string file_beams = "";
 	std::string file_distance = "";
 	std::string file_line = "";
     std::string file_springs  = "";
@@ -1256,10 +1081,6 @@ int main(int argc, char* argv[]) {
 		if (command == "spheres") {
 			got_command = true;
 			file_spheres = argument;
-		}
-		if (command == "beams") {
-			got_command = true;
-			file_beams = argument;
 		}
 		if (command == "distance") {
 			got_command = true;
@@ -1350,27 +1171,20 @@ int main(int argc, char* argv[]) {
 			use_SOR_solver = (bool)atoi(argument.c_str());
 		}
         if (!got_command) {
-            GetLog() << "ERROR. Unknown command in input line: " << command << "\n";
+            std::cout << "ERROR. Unknown command in input line: " << command << "\n";
             return 0;
         } 
         iarg +=2;
     }
     // Create a directory for file outputs
-    filesystem::create_directory("C:/Chrono/masonry_build/Release/output");
+    filesystem::create_directory("output");
 
 	// Set path to Chrono data directory
 	SetChronoDataPath(CHRONO_DATA_DIR);
-
-	//std::cout << "checkpoint 1: so far all good." << std::endl;
 	
 	// Create a ChronoENGINE physical system
-	#ifdef CHRONO_NSC
-		ChSystemNSC mphysicalSystem;
-	#endif 
-		
-	#ifdef CHRONO_SMC
-		ChSystemSMC mphysicalSystem;
-	#endif
+    ChSystemNSC mphysicalSystem;
+	mphysicalSystem.SetNumThreads(4, 4, 4);
 
     mphysicalSystem.SetCollisionSystemType(ChCollisionSystem::Type::BULLET);
 
@@ -1384,54 +1198,28 @@ int main(int argc, char* argv[]) {
     //
 
     // The default material for bricks:
-	#ifdef CHRONO_NSC
-		auto mmaterial = chrono_types::make_shared<ChMaterialSurfaceNSC>();
-		mmaterial->SetFriction(GLOBAL_friction);
-		//mmaterial->SetRestitution(GLOBAL_restitution); // either restitution, or compliance&damping, or none, but not both
-		mmaterial->SetCompliance(GLOBAL_compliance);
-		mmaterial->SetComplianceT(GLOBAL_compliance);
-		mmaterial->SetDampingF(GLOBAL_damping);
-		mmaterial->SetRollingFriction(GLOBAL_rolling_friction);
-		mmaterial->SetSpinningFriction(GLOBAL_spinning_friction);
-		mmaterial->SetComplianceRolling(GLOBAL_rolling_compliance);
-		mmaterial->SetComplianceSpinning(GLOBAL_spinning_compliance);
-	#endif 
-	#ifdef CHRONO_SMC
-		auto mmaterial = chrono_types::make_shared<ChMaterialSurfaceSMC>();
-		mmaterial->SetSfriction(GLOBAL_static_friction);
-		mmaterial->SetKfriction(GLOBAL_kinetic_friction);
-		mmaterial->SetRestitution(GLOBAL_restitution);
-		mmaterial->SetRollingFriction(GLOBAL_rolling_friction);
-		mmaterial->SetSpinningFriction(GLOBAL_spinning_friction);
-		mmaterial->SetYoungModulus(GLOBAL_young);
-		mmaterial->SetAdhesion(GLOBAL_adhesion);
-	#endif
-
+	auto mmaterial = chrono_types::make_shared<ChContactMaterialNSC>();
+    mmaterial->SetFriction(GLOBAL_friction); 
+    //mmaterial->SetRestitution(0.5f); // either restitution, or compliance&damping, or none, but not both
+    mmaterial->SetCompliance(GLOBAL_compliance);
+    mmaterial->SetComplianceT(GLOBAL_compliance);
+    mmaterial->SetDampingF(GLOBAL_damping);
+	mmaterial->SetRollingFriction(GLOBAL_rolling_friction);
+	mmaterial->SetSpinningFriction(GLOBAL_spinning_friction);
+	mmaterial->SetComplianceRolling(GLOBAL_rolling_compliance);
+	mmaterial->SetComplianceSpinning(GLOBAL_spinning_compliance);
 
 	// The default material for spheres:
-	#ifdef CHRONO_NSC
-		auto mmateriall = chrono_types::make_shared<ChMaterialSurfaceNSC>();
-		mmateriall->SetFriction(GLOBAL_friction_spheres);
-		//mmateriall->SetRestitution(GLOBAL_restitution); // either restitution, or compliance&damping, or none, but not both
-		mmateriall->SetCompliance(GLOBAL_compliance);
-		mmateriall->SetComplianceT(GLOBAL_compliance_spheres);
-		mmateriall->SetDampingF(GLOBAL_damping);
-		mmateriall->SetRollingFriction(GLOBAL_rolling_friction);
-		mmateriall->SetSpinningFriction(GLOBAL_spinning_friction);
-		mmateriall->SetComplianceRolling(GLOBAL_rolling_compliance);
-		mmateriall->SetComplianceSpinning(GLOBAL_spinning_compliance);
-	#endif 
-	#ifdef CHRONO_SMC
-		auto mmateriall = chrono_types::make_shared<ChMaterialSurfaceSMC>();
-		mmateriall->SetSfriction(GLOBAL_static_friction);
-		mmateriall->SetKfriction(GLOBAL_kinetic_friction);
-		mmateriall->SetRestitution(GLOBAL_restitution);
-		mmateriall->SetRollingFriction(GLOBAL_rolling_friction);
-		mmateriall->SetSpinningFriction(GLOBAL_spinning_friction);
-		mmateriall->SetYoungModulus(GLOBAL_young);
-		mmateriall->SetAdhesion(GLOBAL_adhesion);
-	#endif
-
+	auto mmateriall = chrono_types::make_shared<ChContactMaterialNSC>();
+	mmateriall->SetFriction(GLOBAL_friction_spheres);
+	//mmateriall->SetRestitution(0.5f); // either restitution, or compliance&damping, or none, but not both
+	mmateriall->SetCompliance(GLOBAL_compliance);
+	mmateriall->SetComplianceT(GLOBAL_compliance_spheres);
+	mmateriall->SetDampingF(GLOBAL_damping);
+	mmateriall->SetRollingFriction(GLOBAL_rolling_friction);
+	mmateriall->SetSpinningFriction(GLOBAL_spinning_friction);
+	mmateriall->SetComplianceRolling(GLOBAL_rolling_compliance);
+	mmateriall->SetComplianceSpinning(GLOBAL_spinning_compliance);
 
     // Create the motion functions, if any
     if (file_motion_x != "") {
@@ -1455,8 +1243,8 @@ int main(int argc, char* argv[]) {
         std::cout << "Collision " << (do_collision ? "ENABLED" : "DISABLED" ) << std::endl;
         load_brick_file (mphysicalSystem, filename, mmaterial, my_body_map, do_collision);
     }
-    catch (ChException my_load_error) {
-        GetLog()<< my_load_error.what();
+    catch (std::runtime_error my_load_error) {
+        std::cout<< my_load_error.what();
         system("pause");
     }
 
@@ -1465,18 +1253,8 @@ int main(int argc, char* argv[]) {
 		try {
 			load_spheres_file (mphysicalSystem, file_spheres, mmateriall, my_body_map);
 		}
-		catch (ChException my_load_error) {
-			GetLog() << my_load_error.what();
-			system("pause");
-		}
-
-	// Create all the beams loading from disk
-	if (file_beams != "")
-			try {
-			load_beam_file(mphysicalSystem, file_beams, my_body_map);
-		}
-		catch (ChException my_load_error) {
-			GetLog() << my_load_error.what();
+		catch (std::runtime_error my_load_error) {
+			std::cout << my_load_error.what();
 			system("pause");
 		}
 
@@ -1485,8 +1263,8 @@ int main(int argc, char* argv[]) {
         try {
             load_spring_file (mphysicalSystem, file_springs, my_body_map);
         }
-        catch (ChException my_load_error) {
-            GetLog() << my_load_error.what();
+        catch (std::runtime_error my_load_error) {
+            std::cout << my_load_error.what();
             system("pause");
         }
 
@@ -1495,8 +1273,8 @@ int main(int argc, char* argv[]) {
 		try {
 			load_distance_file(mphysicalSystem, file_distance, my_body_map);
 		}
-		catch (ChException my_load_error) {
-			GetLog() << my_load_error.what();
+		catch (std::runtime_error my_load_error) {
+			std::cout << my_load_error.what();
 			system("pause");
 		}
 
@@ -1505,36 +1283,23 @@ int main(int argc, char* argv[]) {
 		try {
 			load_line_file(mphysicalSystem, file_line, my_body_map);
 		}
-		catch (ChException my_load_error) {
-			GetLog() << my_load_error.what();
+		catch (std::runtime_error my_load_error) {
+			std::cout << my_load_error.what();
 			system("pause");
 		}
 
 	// Create all the precomputed contacts from disk
 	std::vector<PrecomputedContact> precomputed_contacts;
-
-	//std::cout << "checkpoint 2: so far all good." << std::endl;
-	
-	#ifdef CHRONO_NSC
-		std::shared_ptr<ChContactContainerNSC> precomputed_contact_container;
-	#endif 
-	#ifdef CHRONO_SMC
-		std::shared_ptr<ChContactContainerSMC> precomputed_contact_container;
-	#endif
+	std::shared_ptr<ChContactContainerNSC> precomputed_contact_container;
 
 	if (file_contacts != "")
 			try {
 			load_contacts_file(mphysicalSystem, file_contacts, my_body_map, precomputed_contacts);
-			#ifdef CHRONO_NSC
-				precomputed_contact_container = chrono_types::make_shared<ChContactContainerNSC>();
-			#endif 
-			#ifdef CHRONO_SMC
-				precomputed_contact_container = chrono_types::make_shared<ChContactContainerSMC>();
-			#endif
+			precomputed_contact_container = chrono_types::make_shared<ChContactContainerNSC>();
 			mphysicalSystem.Add(precomputed_contact_container);
 		}
-		catch (ChException my_load_error) {
-			GetLog() << my_load_error.what();
+		catch (std::runtime_error my_load_error) {
+			std::cout << my_load_error.what();
 			system("pause");
 		}
 
@@ -1547,64 +1312,42 @@ int main(int argc, char* argv[]) {
     application->Initialize();
     application->AddLogo();
     application->AddSkyBox();
-    //application->AddCamera(ChVector<>(0, 1.6, 6),ChVector<>(0, 1.6, -3));
-	application->AddCamera(ChVector<>(0, 2.6, 10), ChVector<>(0, 1.6, -3));
+    //application->AddCamera(ChVector3<>(0, 1.6, 6),ChVector3<>(0, 1.6, -3));
+	application->AddCamera(ChVector3<>(0, 2.6, 10), ChVector3<>(0, 1.6, -3));
 	//application->AddTypicalLights();
-	application->AddLight(ChVector<>(70.f, 120.f, -90.f), 190, ChColor(0.7f, 0.7f, 0.7f));
-	application->AddLight(ChVector<>(30.f, 80.f, 160.f), 190, ChColor(0.7f, 0.7f, 0.7f));
-	//application->AddLight(ChVector<>(70.f, 120.f, -90.f), 280, ChColor(0.7f, 0.7f, 0.7f));
-	//application->AddLight(ChVector<>(30.f, 80.f, 160.f), 250, ChColor(0.7f, 0.7f, 0.7f));
-	//application->AddGrid(0.5, 0.5, 10, 10, ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),ChColor(0, 0, 0));
-    application->AddGrid(0.5, 0.5, 20, 20, ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),ChColor(0, 0, 0));
+	application->AddLight(ChVector3<>(70.f, 120.f, -90.f), 190, ChColor(0.7f, 0.7f, 0.7f));
+	application->AddLight(ChVector3<>(30.f, 80.f, 160.f), 190, ChColor(0.7f, 0.7f, 0.7f));
+	//application->AddLight(ChVector3<>(70.f, 120.f, -90.f), 280, ChColor(0.7f, 0.7f, 0.7f));
+	//application->AddLight(ChVector3<>(30.f, 80.f, 160.f), 250, ChColor(0.7f, 0.7f, 0.7f));
+	//application->AddGrid(0.5, 0.5, 10, 10, ChCoordsys<>(ChVector3<>(0, 0, 0), QuatFromAngleX(CH_PI_2)),ChColor(0, 0, 0));
+    application->AddGrid(0.5, 0.5, 20, 20, ChCoordsys<>(ChVector3<>(0, 0, 0), QuatFromAngleX(CH_PI_2)),ChColor(0, 0, 0));
     application->SetSymbolScale(5e-5);
+	application->ShowInfoPanel(true);
+
 
 
     // Set no gravity on Y:
-    mphysicalSystem.Set_G_acc(ChVector<>(0,-9.81,0));
-    //application->GetSystem()->Set_G_acc(ChVector<>(9.8*0.2,-9.8,0));
+    mphysicalSystem.SetGravitationalAcceleration(ChVector3<>(0,-9.81,0));
+    //application->GetSystem()->Set_G_acc(ChVector3<>(9.8*0.2,-9.8,0));
 
     // Prepare the physical system for the simulation
 
-	#ifdef CHRONO_NSC
-		#ifdef CHRONO_PARDISO_MKLandADMM
-			std::shared_ptr<ChDirectSolverLS> admm_linear_solver;
-			admm_linear_solver = chrono_types::make_shared<ChSolverPardisoMKL>();
-			//admm_linear_solver = chrono_types::make_shared<ChSolverSparseQR>();
-			auto solver = chrono_types::make_shared<ChSolverADMM>(admm_linear_solver);
-			solver->EnableWarmStart(true);
-			solver->SetMaxIterations(1200);
-			solver->SetToleranceDual(1e-6);
-			solver->SetTolerancePrimal(1e-6);
-			solver->SetRho(1);
-			solver->SetStepAdjustPolicy(ChSolverADMM::AdmmStepType::BALANCED_UNSCALED);
-			mphysicalSystem.SetSolver(solver);
-		#endif
-		#ifndef CHRONO_PARDISO_MKLandADMM
-			if (use_SOR_solver)
-				mphysicalSystem.SetSolverType(ChSolver::Type::PSSOR);  // less precise, faster
-			else{
-				mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
-					auto msolv = mphysicalSystem.GetSolver();
-				if (auto mbbsol = std::dynamic_pointer_cast<chrono::ChSolverBB>(msolv)) {
-					mbbsol->EnableWarmStart(GLOBAL_warmstart);
-				}
-			}
-		#endif
-	#endif
-	
-    #ifdef CHRONO_SMC
-		auto solver = chrono_types::make_shared<ChSolverMINRES>();
-		mphysicalSystem.SetSolver(solver);
-		solver->SetMaxIterations(800);
-		solver->SetTolerance(1e-12);
-		solver->EnableDiagonalPreconditioner(true);
-		solver->EnableWarmStart(true);  // Enable for better convergence when using Euler implicit linearized
-	#endif
+	if (use_SOR_solver) {
+		mphysicalSystem.SetSolverType(ChSolver::Type::PSSOR);  // less precise, faster
+		std::cout << "using PSOR" << std::endl;
+	}
+	else{
+		mphysicalSystem.SetSolverType(ChSolver::Type::BARZILAIBORWEIN); // precise, slower
+		        auto msolv = mphysicalSystem.GetSolver();
+        if (auto mbbsol = std::dynamic_pointer_cast<chrono::ChSolverBB>(msolv)) {
+            mbbsol->EnableWarmStart(GLOBAL_warmstart);
+        }
+		std::cout << "using BARZILAIBORWEIN" << std::endl;
+	}
 
     mphysicalSystem.SetMaxPenetrationRecoverySpeed(GLOBAL_penetrationrecovery); 
-    mphysicalSystem.SetSolverMaxIterations(GLOBAL_iterations);
-
-	//std::cout << "checkpoint 3: so far all good." << std::endl;
+    mphysicalSystem.GetSolver()->AsIterative()->SetMaxIterations(GLOBAL_iterations);
+	mphysicalSystem.GetSolver()->AsIterative()->SetTolerance(GLOBAL_tolerance);
 
     //
     // THE SOFT-REAL-TIME CYCLE
@@ -1624,7 +1367,7 @@ int main(int argc, char* argv[]) {
         application->Render();
         application->EndScene();
 		
-        if (GLOBAL_snapshot_each && (mphysicalSystem.GetStepcount() % GLOBAL_snapshot_each == 0)) {
+        if (GLOBAL_snapshot_each && (mphysicalSystem.GetNumSteps() % GLOBAL_snapshot_each == 0)) {
                 ++snap_num;
                 char filename[300];
                 sprintf(filename, "snapshot_%05d.jpg", snap_num);
@@ -1632,7 +1375,7 @@ int main(int argc, char* argv[]) {
         }
 
         tools::drawGrid(application.get(), 0.5, 0.5, 20, 20,
-                             ChCoordsys<>(ChVector<>(0, 0, 0), Q_from_AngAxis(CH_C_PI / 2, VECT_X)),
+                             ChCoordsys<>(ChVector3<>(0, 0, 0), QuatFromAngleX(CH_PI_2)),
                              ChColor(50/255, 90/255, 90/255), true);
 
 		// Populate precomputed contacts  if a file of contacts at t=0 is provided.
@@ -1649,14 +1392,14 @@ int main(int argc, char* argv[]) {
 		}
 
 		// Restate spring constants
-		auto mlink = mphysicalSystem.Get_linklist().begin();
-		while (mlink != mphysicalSystem.Get_linklist().end()) {
+		auto mlink = mphysicalSystem.GetLinks().begin();
+		while (mlink != mphysicalSystem.GetLinks().end()) {
 			if (auto mspring = std::dynamic_pointer_cast<ChLinkTSDA>((*mlink))) {
 				double deltax = mspring->GetDeformation();
-				int mID = mspring->GetIdentifier();
+				int mID = mspring->GetTag();
 				for (int ck = 0; ck < Spring_Counter; ck++) {
 					if (mID == Spring_Storage_K[ck][1]) {
-						double mK = (Spring_Storage_K[ck][2])*(atan((Spring_Storage_K[ck][2]) / 1000 * deltax) + PI / 2) / PI;
+						double mK = (Spring_Storage_K[ck][2])*(atan((Spring_Storage_K[ck][2]) / 1000 * deltax) + CH_PI_2) / CH_PI;
 						mspring->SetSpringCoefficient(mK);
 					}
 				}
@@ -1669,7 +1412,7 @@ int main(int argc, char* argv[]) {
 		auto mmbody = mphysicalSystem.Get_bodylist().begin();
 		while (mmbody != mphysicalSystem.Get_bodylist().end()) {
 			if (auto panel = std::dynamic_pointer_cast<ChBodyAuxRef>((*mmbody))) {
-				int mmID = panel->GetIdentifier();
+				int mmID = panel->GetTag();
 				if (mmID == 994) {
 					my_pos994[1][1] = panel->GetPos().x();
 					my_pos994[2][1] = panel->GetPos().y();
@@ -1691,19 +1434,16 @@ int main(int argc, char* argv[]) {
 		}
 		*/
 
-		//++ii;
-		//std::cout << "checkpoint "<< ii <<": so far all good." << std::endl;
-		
         // Do some output to disk, for later postprocessing
-        if (GLOBAL_save_each && (mphysicalSystem.GetStepcount() % GLOBAL_save_each  == 0))
+        if (GLOBAL_save_each && (mphysicalSystem.GetNumSteps() % GLOBAL_save_each  == 0))
         {
             // a) Use the contact callback object to save contacts:
-			char contactfilename[200];
-            sprintf(contactfilename, "output/%s%05d%s", "contacts", (int)mphysicalSystem.GetStepcount(), ".txt");  // ex: contacts00020.tx
+            char contactfilename[200];
+            sprintf(contactfilename, "output/%s%05d%s", "contacts", (int)mphysicalSystem.GetNumSteps(), ".txt");  // ex: contacts00020.tx
             std::shared_ptr<_contact_reporter_class> my_contact_rep(new _contact_reporter_class);
 
             //_contact_reporter_class my_contact_rep;
-            ChStreamOutAsciiFile result_contacts(contactfilename);
+            std::ofstream result_contacts(contactfilename);
             my_contact_rep->mfile = &result_contacts;
             mphysicalSystem.GetContactContainer()->ReportAllContacts(my_contact_rep);
 			if (precomputed_contact_container)
@@ -1711,11 +1451,11 @@ int main(int argc, char* argv[]) {
 
             // b) Save rigid body positions and rotations
             char bodyfilename[200];
-            sprintf(bodyfilename, "output/%s%05d%s", "bodies", (int)mphysicalSystem.GetStepcount(), ".txt");  // ex: bodies00020.txt
-            ChStreamOutAsciiFile result_bodies(bodyfilename);
-			auto mbodies = mphysicalSystem.Get_bodylist().begin(); 
-            while (mbodies != mphysicalSystem.Get_bodylist().end()) {
-                result_bodies   << (*mbodies)->GetIdentifier()  << ", " 
+            sprintf(bodyfilename, "output/%s%05d%s", "bodies", (int)mphysicalSystem.GetNumSteps(), ".txt");  // ex: bodies00020.tx
+			std::ofstream result_bodies(bodyfilename);
+			auto mbodies = mphysicalSystem.GetBodies().begin(); 
+            while (mbodies != mphysicalSystem.GetBodies().end()) {
+                result_bodies   << (*mbodies)->GetTag()  << ", " 
                                 << (*mbodies)->GetPos().x()  << ", "
                                 << (*mbodies)->GetPos().y()  << ", "
                                 << (*mbodies)->GetPos().z()  << ", "
@@ -1723,19 +1463,19 @@ int main(int argc, char* argv[]) {
                                 << (*mbodies)->GetRot().e1()  << ", "
                                 << (*mbodies)->GetRot().e2()  << ", "
                                 << (*mbodies)->GetRot().e3()  << ", "
-                                << (*mbodies)->GetRotAngle() * CH_C_RAD_TO_DEG  << "\n";
+                                << (*mbodies)->GetRotAngle() * CH_RAD_TO_DEG  << "\n";
                 ++mbodies;
             }
 
-            // c) Save spring reactions
+            // b) Save spring reactions
             char springfilename[200];
-            sprintf(springfilename, "output/%s%05d%s", "springs", (int)mphysicalSystem.GetStepcount(), ".txt");  // ex: springs00020.txt
-            ChStreamOutAsciiFile result_springs(springfilename);
-            auto mlink = mphysicalSystem.Get_linklist().begin();
-            while (mlink != mphysicalSystem.Get_linklist().end()) {
+            sprintf(springfilename, "output/%s%05d%s", "springs", (int)mphysicalSystem.GetNumSteps(), ".txt");  // ex: springs00020.tx
+			std::ofstream result_springs(springfilename);
+            auto mlink = mphysicalSystem.GetLinks().begin();
+            while (mlink != mphysicalSystem.GetLinks().end()) {
                 if (auto mspring = std::dynamic_pointer_cast<ChLinkTSDA>((*mlink)))
-                result_springs  << mspring->GetIdentifier()  << ", " 
-                                << mspring->Get_react_force()  << ", "
+                result_springs  << mspring->GetTag()  << ", " 
+                                << mspring->GetReaction2().force.Length()  << ", "
                                 << mspring->GetPoint1Abs().x() << ", "
                                 << mspring->GetPoint1Abs().y() << ", "
                                 << mspring->GetPoint1Abs().z() << ", "
@@ -1745,47 +1485,6 @@ int main(int argc, char* argv[]) {
                                 << "\n";
                 ++mlink;
             }
-			
-			// d) Save beam reactions
-			char beamfilename[200];
-			ChVector<> point1, point2, force1, force2, moment1, moment2;
-			sprintf(beamfilename, "output/%s%05d%s", "beams", (int)mphysicalSystem.GetStepcount(), ".txt");  // ex: beams00020.txt
-			ChStreamOutAsciiFile result_beams(beamfilename);
-			auto mmesh = mphysicalSystem.Get_meshlist().begin();
-			while (mmesh != mphysicalSystem.Get_meshlist().end()) {
-				if (auto mbeam = std::dynamic_pointer_cast<ChElementBeamIGA>((*mmesh))){
-					mbeam->EvaluateSectionForceTorque(-1, force1, moment1);
-				}
-				if (auto mbeam = std::dynamic_pointer_cast<ChElementBeamIGA>((*mmesh))) {
-					mbeam->EvaluateSectionPoint(-1, point1);
-				}
-				if (auto mbeam = std::dynamic_pointer_cast<ChElementBeamIGA>((*mmesh))) {
-					mbeam->EvaluateSectionForceTorque(+1, force2, moment2);
-				}
-				if (auto mbeam = std::dynamic_pointer_cast<ChElementBeamIGA>((*mmesh))) {
-					mbeam->EvaluateSectionPoint(+1, point2);
-				}
-					result_beams	<< point1[0] << ", "
-									<< point1[1] << ", "
-									<< point1[2] << ", "
-									<< force1[0] << ", "
-									<< force1[1] << ", "
-									<< force1[2] << ", "
-									<< moment1[0] << ", "
-									<< moment1[1] << ", "
-									<< moment1[2] << ", "
-									<< point2[0] << ", "
-									<< point2[1] << ", "
-									<< point2[2] << ", "
-									<< force2[0] << ", "
-									<< force2[1] << ", "
-									<< force2[2] << ", "
-									<< moment2[0] << ", "
-									<< moment2[1] << ", "
-									<< moment2[2] << ", "
-									<< "\n";
-				++mmesh;
-			}
         }
 
         // Force the simulator to close after N seconds
