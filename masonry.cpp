@@ -1,40 +1,28 @@
 //
 // MASONRY
 //
-// Program that simulates masonry using the Chrono::Engine multibody library
-// from www.chronoengine.info
+// Program that simulates masonry using the Chrono multibody library
+// from www.projectchrono.org
 //
 
-#include "chrono/physics/ChSystemNSC.h"
-#include "chrono/physics/ChContactContainerNSC.h"
-#include "chrono/physics/ChLinkLock.h"
-#include "chrono/physics/ChLinkMate.h"
-#include "chrono/physics/ChLinkDistance.h"
-#include "chrono/physics/ChBodyEasy.h"
-#include "chrono/physics/ChLinkTSDA.h"
-#include "chrono/assets/ChTexture.h"
-#include "chrono/assets/ChVisualShapePointPoint.h"
-#include "chrono/collision/bullet/ChCollisionSystemBullet.h"
-#include "chrono/collision/ChCollisionShapeConvexHull.h"
-#include "chrono/collision/bullet/ChCollisionUtilsBullet.h"
-#include "chrono/solver/ChSolverBB.h"
-#include "chrono_irrlicht/ChVisualSystemIrrlicht.h"
-#include "chrono/utils/ChCompositeInertia.h"
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <string>
-#include <algorithm>
-#include <functional> 
-#include <cctype>
-#include <unordered_map>
-#include "chrono_thirdparty/filesystem/path.h"
-#include <stdexcept>
-#include "chrono/core/ChRandom.h"
-//#include <exception>
+#include <chrono/physics/ChSystemNSC.h>
+#include <chrono/physics/ChContactContainerNSC.h>
+#include <chrono/physics/ChLinkLock.h>
+#include <chrono/physics/ChLinkMate.h>
+#include <chrono/physics/ChLinkDistance.h>
+#include <chrono/physics/ChBodyEasy.h>
+#include <chrono/physics/ChLinkTSDA.h>
+#include <chrono/assets/ChTexture.h>
+#include <chrono/assets/ChVisualShapePointPoint.h>
+#include <chrono/collision/bullet/ChCollisionSystemBullet.h>
+#include <chrono/collision/ChCollisionShapeConvexHull.h>
+#include <chrono/collision/bullet/ChCollisionUtilsBullet.h>
+#include <chrono/solver/ChSolverBB.h>
+#include <chrono_irrlicht/ChVisualSystemIrrlicht.h>
+#include <chrono/physics/ChMassProperties.h>
+#include <chrono/core/ChRandom.h>
 
 // Use the namespace of Chrono
-
 using namespace chrono;
 using namespace irrlicht;
 
@@ -47,11 +35,7 @@ using namespace io;
 using namespace gui;
 
 
-//using namespace std;
-
-
 // Some global variables
-
 int    GLOBAL_save_each = 50;
 int    GLOBAL_snapshot_each = 50;
 double GLOBAL_max_simulation_time = 10; 
@@ -215,7 +199,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
             //std::shared_ptr<ChBodyEasyConvexHullAuxRef> my_body (new ChBodyEasyConvexHullAuxRef(my_vertexes[0],1800,true, my_visible));
             auto my_body = chrono_types::make_shared<ChBodyAuxRef>();
 
-            utils::CompositeInertia composite_inertia;
+            CompositeInertia composite_inertia;
 
             for (int ih = 0 ; ih < my_vertexes.size() ; ++ih) {
 
@@ -270,7 +254,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 				my_body->EnableCollision(true);
 
             my_body->SetTag(my_ID);
-            my_body->AccumulateForce(my_force, VNULL, true); // add force to COG of body.
+            my_body->AccumulateForce(0, my_force, VNULL, true); // add force to COG of body.
             my_body->GetCollisionModel()->SetAllShapesMaterial(mmaterial); //TODO: check if correct. Was my_body->SetMaterialSurface(mmaterial);
             
             my_body->SetFrameRefToAbs(ChFrame<>(my_reference));
@@ -987,21 +971,22 @@ void load_motion(std::shared_ptr<ChFunctionInterp> mrecorder, std::string filena
 
 // This is the contact reporter class, just for writing contacts on 
 // a file on disk
-class _contact_reporter_class : public  ChContactContainer::ReportContactCallback
+class ContactReporter : public  ChContactContainer::ReportContactCallback
 {
     public:
 	std::ofstream* mfile; // the file to save data into
 
 	virtual bool OnReportContact(
-		const ChVector3<>& pA,             ///< contact pA
-		const ChVector3<>& pB,             ///< contact pB
-		const ChMatrix33<>& plane_coord,  ///< contact plane coordsystem (A column 'X' is contact normal)
-		const double& distance,           ///< contact distance
-		const double& eff_radius,         ///< effective radius of curvature at contact
-		const ChVector3<>& react_forces,   ///< react.forces (if already computed). In coordsystem 'plane_coord'
-		const ChVector3<>& react_torques,  ///< react.torques, if rolling friction (if already computed).
-		ChContactable* contactobjA,  ///< model A (note: some containers may not support it and could be nullptr)
-		ChContactable* contactobjB   ///< model B (note: some containers may not support it and could be nullptr)
+		const ChVector3d& pA,				///< contact pA
+		const ChVector3d& pB,				///< contact pB
+		const ChMatrix33<>& plane_coord,	///< contact plane coordsystem (A column 'X' is contact normal)
+		double distance,					///< contact distance
+		double eff_radius,					///< effective radius of curvature at contact
+		const ChVector3d& react_forces,		///< react.forces (if already computed). In coordsystem 'plane_coord'
+		const ChVector3d& react_torques,	///< react.torques, if rolling friction (if already computed).
+		ChContactable* contactobjA,			///< model A (note: some containers may not support it and could be nullptr)
+		ChContactable* contactobjB,			///< model B (note: some containers may not support it and could be nullptr)
+		int constraint_offset				///< NSC only: offset of first constraint (normal component)
 	) override {
 
         // For each contact, this function is executed. 
@@ -1177,7 +1162,7 @@ int main(int argc, char* argv[]) {
         iarg +=2;
     }
     // Create a directory for file outputs
-    filesystem::create_directory("output");
+    std::filesystem::create_directory("output");
 
 	// Set path to Chrono data directory
 	SetChronoDataPath(CHRONO_DATA_DIR);
@@ -1374,7 +1359,7 @@ int main(int argc, char* argv[]) {
                 application->WriteImageToFile(filename);
         }
 
-        tools::drawGrid(application.get(), 0.5, 0.5, 20, 20,
+        tools::DrawGrid(application.get(), 0.5, 0.5, 20, 20,
                              ChCoordsys<>(ChVector3<>(0, 0, 0), QuatFromAngleX(CH_PI_2)),
                              ChColor(50/255, 90/255, 90/255), true);
 
@@ -1440,9 +1425,9 @@ int main(int argc, char* argv[]) {
             // a) Use the contact callback object to save contacts:
             char contactfilename[200];
             sprintf(contactfilename, "output/%s%05d%s", "contacts", (int)mphysicalSystem.GetNumSteps(), ".txt");  // ex: contacts00020.tx
-            std::shared_ptr<_contact_reporter_class> my_contact_rep(new _contact_reporter_class);
+            std::shared_ptr<ContactReporter> my_contact_rep(new ContactReporter);
 
-            //_contact_reporter_class my_contact_rep;
+            //ContactReporter my_contact_rep;
             std::ofstream result_contacts(contactfilename);
             my_contact_rep->mfile = &result_contacts;
             mphysicalSystem.GetContactContainer()->ReportAllContacts(my_contact_rep);
