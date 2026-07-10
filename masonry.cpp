@@ -254,6 +254,7 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 				my_body->EnableCollision(true);
 
             my_body->SetTag(my_ID);
+			my_body->AddAccumulator();
             my_body->AccumulateForce(0, my_force, VNULL, true); // add force to COG of body.
             my_body->GetCollisionModel()->SetAllShapesMaterial(mmaterial); //TODO: check if correct. Was my_body->SetMaterialSurface(mmaterial);
             
@@ -321,7 +322,9 @@ void load_brick_file(ChSystem& mphysicalSystem, const char* filename,
 							auto absolute_body = chrono_types::make_shared<ChBody>();
 							absolute_body->SetFixed(true);
 							mphysicalSystem.Add(absolute_body);
-							std::shared_ptr<ChLinkLockPrismatic> my_constr(new ChLinkLockPrismatic);
+							//std::shared_ptr<ChLinkLockPrismatic> my_constr(new ChLinkLockPrismatic);
+							//my_constr->Initialize(my_body, absolute_body, ChFrame<>(ChVector3<>(0, 0, 0), QuatFromAngleAxis(CH_PI / 2, VECT_Y)));
+							std::shared_ptr<ChLinkMatePlanar> my_constr(new ChLinkMatePlanar);
 							my_constr->Initialize(my_body, absolute_body, ChFrame<>(ChVector3<>(0, 0, 0), QuatFromAngleAxis(CH_PI / 2, VECT_Y)));
 							mphysicalSystem.Add(my_constr);
 						}
@@ -558,8 +561,14 @@ void load_spring_file(ChSystem& mphysicalSystem, std::string& filename, std::uno
             mphysicalSystem.Add(my_spring);
 
             auto my_line = chrono_types::make_shared<ChVisualShapeSegment>();
-            my_line->SetColor(ChColor(0.2f, 0.2f, 1.0f));
+            my_line->SetColor(ChColor(0.0f, 0.0f, 0.0f));
+			my_line->SetMutable(true);
+			my_line->SetThickness(50.f);
             my_spring->AddVisualShape(my_line);
+			//auto my_spring_shape = chrono_types::make_shared<ChVisualShapeSpring>(0.5, 80, 15);
+			//my_spring_shape->SetMutable(true);
+			//my_spring_shape->SetColor(ChColor(0.2f, 0.2f, 1.0f));
+			//my_spring->AddVisualShape(my_spring_shape);
 		}
 
 	} // end while
@@ -660,6 +669,7 @@ void load_distance_file(ChSystem& mphysicalSystem, std::string& filename, std::u
 
             auto my_line = chrono_types::make_shared<ChVisualShapeSegment>();
             my_line->SetColor(ChColor(1.0f, 0.0f, 0.0f));
+			my_line->SetMutable(true);
             my_dist->AddVisualShape(my_line);
 		}
 
@@ -747,7 +757,8 @@ void load_line_file(ChSystem& mphysicalSystem, std::string& filename, std::unord
 			mphysicalSystem.Add(my_dist);
 
             auto my_line = chrono_types::make_shared<ChVisualShapeSegment>();
-            my_line->SetColor(ChColor(0.0f, 0.0f, 0.0f));
+            my_line->SetColor(ChColor(0.2f, 0.2f, 1.0f));
+			my_line->SetMutable(true);
             my_dist->AddVisualShape(my_line);
 		}
 
@@ -1298,14 +1309,14 @@ int main(int argc, char* argv[]) {
     application->AddLogo();
     application->AddSkyBox();
     //application->AddCamera(ChVector3<>(0, 1.6, 6),ChVector3<>(0, 1.6, -3));
-	application->AddCamera(ChVector3<>(0, 2.6, 10), ChVector3<>(0, 1.6, -3));
+	application->AddCamera(ChVector3<>(-27, 15.84, 32.5), ChVector3<>(4.4, 15.84, -22));
 	//application->AddTypicalLights();
 	application->AddLight(ChVector3<>(70.f, 120.f, -90.f), 190, ChColor(0.7f, 0.7f, 0.7f));
 	application->AddLight(ChVector3<>(30.f, 80.f, 160.f), 190, ChColor(0.7f, 0.7f, 0.7f));
 	//application->AddLight(ChVector3<>(70.f, 120.f, -90.f), 280, ChColor(0.7f, 0.7f, 0.7f));
 	//application->AddLight(ChVector3<>(30.f, 80.f, 160.f), 250, ChColor(0.7f, 0.7f, 0.7f));
 	//application->AddGrid(0.5, 0.5, 10, 10, ChCoordsys<>(ChVector3<>(0, 0, 0), QuatFromAngleX(CH_PI_2)),ChColor(0, 0, 0));
-    application->AddGrid(0.5, 0.5, 20, 20, ChCoordsys<>(ChVector3<>(0, 0, 0), QuatFromAngleX(CH_PI_2)),ChColor(0, 0, 0));
+    application->AddGrid(42.5/9, 5, 18, 12, ChCoordsys<>(ChVector3<>(0, 0, 0), QuatFromAngleX(CH_PI_2)),ChColor(0, 0, 0));
     application->SetSymbolScale(5e-5);
 	application->ShowInfoPanel(true);
 
@@ -1456,9 +1467,9 @@ int main(int argc, char* argv[]) {
             char springfilename[200];
             sprintf(springfilename, "output/%s%05d%s", "springs", (int)mphysicalSystem.GetNumSteps(), ".txt");  // ex: springs00020.tx
 			std::ofstream result_springs(springfilename);
-            auto mlink = mphysicalSystem.GetLinks().begin();
-            while (mlink != mphysicalSystem.GetLinks().end()) {
-                if (auto mspring = std::dynamic_pointer_cast<ChLinkTSDA>((*mlink)))
+            auto mlink1 = mphysicalSystem.GetLinks().begin();
+            while (mlink1 != mphysicalSystem.GetLinks().end()) {
+                if (auto mspring = std::dynamic_pointer_cast<ChLinkTSDA>((*mlink1)))
                 result_springs  << mspring->GetTag()  << ", " 
                                 << mspring->GetReaction2().force.Length()  << ", "
                                 << mspring->GetPoint1Abs().x() << ", "
@@ -1468,7 +1479,7 @@ int main(int argc, char* argv[]) {
                                 << mspring->GetPoint2Abs().y() << ", "
                                 << mspring->GetPoint2Abs().z() << ", "
                                 << "\n";
-                ++mlink;
+                ++mlink1;
             }
         }
 
